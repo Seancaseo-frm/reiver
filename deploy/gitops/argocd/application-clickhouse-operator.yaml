@@ -1,0 +1,31 @@
+# Argo CD Application: ClickHouse Kubernetes Operator.
+# Deploys the official operator which manages ClickHouseCluster and KeeperCluster CRDs.
+# Requires cert-manager (already installed separately).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: clickhouse-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: reiver
+  source:
+    chart: clickhouse-operator-helm
+    repoURL: ghcr.io/clickhouse
+    targetRevision: 0.0.3
+    helm:
+      valuesObject:
+        certManager:
+          enable: true
+          install: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: clickhouse-operator-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

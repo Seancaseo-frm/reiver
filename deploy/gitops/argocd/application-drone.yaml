@@ -1,0 +1,73 @@
+# Argo CD Application: Drone CI (server + Kubernetes runner in cluster).
+# Chart is vendored at deploy/gitops/charts/drone (community chart + drone.fullname fix for NOTES).
+# setup-server.sh replaces REPLACE_REPO_URL and REPLACE_DRONE_HOST. Open Drone at http://<server-ip>:30480.
+# After sync, create secrets in namespace drone (see deploy/docs/DRONE.md).
+# Prune=false so your manually created drone-server-secrets is not removed on sync (chart does not emit it when server.secrets is empty).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: drone
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: reiver
+  source:
+    repoURL: https://github.com/your-org/reiver.git
+    path: deploy/gitops/charts/drone
+    targetRevision: HEAD
+    helm:
+      releaseName: drone
+      valuesObject:
+        secretsExtension:
+          enabled: true
+        server:
+          # Try 2.26.0: 2.27.0 serves SPA for GET /authorize so OAuth callback never runs (no code exchange)
+          image:
+            tag: "2.26.0"
+          env:
+            # REPLACE_DRONE_HOST → setup-server.sh uses IP only; run fix-drone-oauth-host.sh after sync to set IP:nodePort for OAuth
+            DRONE_SERVER_HOST: REPLACE_DRONE_HOST
+            DRONE_SERVER_PROTO: http
+            DRONE_GITHUB: "true"
+            DRONE_LOGS_DEBUG: "true"
+            # Cookie set after GitHub redirect may not be sent on next request if SameSite is strict
+            DRONE_COOKIE_SAMESITE: "lax"
+          service:
+            type: NodePort
+          nodeSelector:
+            reiver.io/role: ci
+        kubeRunner:
+          enabled: true
+          rbac:
+            buildNamespaces:
+              - drone-builds
+          env:
+            DRONE_NAMESPACE_DEFAULT: drone-builds
+            # Allow steps to run up to 3h (default is 1h; long Kaniko builds can hit the limit)
+            DRONE_TIMEOUT: "3h"
+            # Resolve from_secret from K8s Secrets via extension (see deploy/docs/DRONE.md)
+            DRONE_SECRET_PLUGIN_ENDPOINT: "http://drone-kubernetes-secrets:3000"
+            # Pin build pods to the CI node via policy file
+            DRONE_POLICY_FILE: /etc/drone/policy.yaml
+          extraSecretNamesForEnvFrom:
+            - drone-secret-plugin
+          nodeSelector:
+            reiver.io/role: ci
+          extraVolumes:
+            - name: drone-policy
+              configMap:
+                name: drone-build-policy
+          extraVolumeMounts:
+            - name: drone-policy
+              mountPath: /etc/drone
+              readOnly: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: drone
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

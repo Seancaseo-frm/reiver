@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reiver-docs
+  namespace: reiver
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: reiver-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - docs.reiver.ai
+      secretName: reiver-docs-tls
+    - hosts:
+        - docs.reiver.ai
+      secretName: reiver-docs-tls
+  rules:
+    - host: docs.reiver.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reiver-docs
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reiver-docs-old-redirect
+  namespace: reiver
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: reiver-redirect-https@kubernetescrd,reiver-redirect-docs-reiver-to-reiver@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - docs.reiver.ai
+      secretName: reiver-docs-tls
+  rules:
+    - host: docs.reiver.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reiver-docs
+                port:
+                  number: 80

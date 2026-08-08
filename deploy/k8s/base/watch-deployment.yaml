@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-watch
+  namespace: reiver
+  labels:
+    app: reiver-watch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reiver-watch
+  template:
+    metadata:
+      labels:
+        app: reiver-watch
+    spec:
+      containers:
+        - name: api
+          image: reiver-watch:latest
+          imagePullPolicy: Always
+          command: ["./reiver-watch"]
+          args: ["--mode", "api"]
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - secretRef:
+                name: reiver-watch
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: FLOW_URL
+              value: "http://reiver-flow.reiver.svc:3001"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://localhost:3000/api"
+            - name: OTEL_PROJECT_ID
+              value: "07ce3ace-5133-496a-ba55-9bf40bb5d3aa"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-watch,service.version=c04e23aedba7f78a13bdb35e70baf1a7351bd9ea"
+            - name: PROFILING_ENABLED
+              value: "true"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: "750m"
+              memory: "1536Mi"
+            limits:
+              cpu: "2000m"
+              memory: "6Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-watch
+  namespace: reiver
+  labels:
+    app: reiver-watch
+spec:
+  selector:
+    app: reiver-watch
+  ports:
+    - port: 3000
+      targetPort: http
+      name: http
+  type: ClusterIP

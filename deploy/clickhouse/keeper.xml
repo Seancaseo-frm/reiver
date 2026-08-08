@@ -1,0 +1,61 @@
+<!-- ClickHouse Keeper Configuration (for replication coordination)
+     Place in /etc/clickhouse-server/config.d/keeper.xml
+     
+     ClickHouse Keeper is ClickHouse's built-in alternative to ZooKeeper.
+     Required for ReplicatedMergeTree tables.
+-->
+<clickhouse>
+    <!-- Enable ClickHouse Keeper on this node -->
+    <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>  <!-- Change for each node: 1, 2, 3... -->
+        
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+        
+        <raft_configuration>
+            <!-- Single node setup -->
+            <server>
+                <id>1</id>
+                <hostname>clickhouse-1</hostname>
+                <port>9234</port>
+            </server>
+            <!-- Uncomment for multi-node Keeper cluster:
+            <server>
+                <id>2</id>
+                <hostname>clickhouse-2</hostname>
+                <port>9234</port>
+            </server>
+            <server>
+                <id>3</id>
+                <hostname>clickhouse-3</hostname>
+                <port>9234</port>
+            </server>
+            -->
+        </raft_configuration>
+    </keeper_server>
+    
+    <!-- Connect to Keeper for replication -->
+    <zookeeper>
+        <node>
+            <host>clickhouse-1</host>
+            <port>9181</port>
+        </node>
+        <!-- Uncomment for multi-node Keeper:
+        <node>
+            <host>clickhouse-2</host>
+            <port>9181</port>
+        </node>
+        <node>
+            <host>clickhouse-3</host>
+            <port>9181</port>
+        </node>
+        -->
+    </zookeeper>
+</clickhouse>

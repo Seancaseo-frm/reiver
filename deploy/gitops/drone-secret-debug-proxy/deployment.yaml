@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drone-secret-debug-proxy
+  namespace: drone
+  labels:
+    app: drone-secret-debug-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: drone-secret-debug-proxy
+  template:
+    metadata:
+      labels:
+        app: drone-secret-debug-proxy
+    spec:
+      nodeSelector:
+        reiver.io/role: ci
+      containers:
+        - name: proxy
+          image: python:3.11-alpine
+          command: ["python", "/script/proxy.py"]
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            - name: script
+              mountPath: /script
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      volumes:
+        - name: script
+          configMap:
+            name: drone-secret-debug-proxy-script
+            defaultMode: 0555

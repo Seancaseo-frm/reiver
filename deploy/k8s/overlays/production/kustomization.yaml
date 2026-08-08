@@ -1,0 +1,94 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: reiver
+
+resources:
+  - ../../base
+  - website-ingress.yaml
+  - docs-ingress.yaml
+  - letsencrypt-issuer.yaml
+  - https-redirect-middleware.yaml
+  - domain-redirect-middleware.yaml
+  - flow-hpa.yaml
+  - website-hpa.yaml
+  - flow-pdb.yaml
+  - website-pdb.yaml
+  - flow-network-policy.yaml
+
+# Override images. CI replaces ghcr.io/your-org/reiver with ghcr.io/OWNER/REPO on release; set explicitly until first release.
+images:
+  - name: reiver-watch:latest
+    newName: ghcr.io/your-org/reiver-watch
+    newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
+  - name: reiver-flow:latest
+    newName: ghcr.io/your-org/reiver-flow
+    newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
+  # Pond disabled — re-enable when Pond launches
+  # - name: reiver-pond:latest
+  #   newName: ghcr.io/your-org/reiver-pond
+  #   newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
+  - name: reiver-website:latest
+    newName: ghcr.io/your-org/reiver-website
+    newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
+  - name: reiver-mcp:latest
+    newName: ghcr.io/your-org/reiver-mcp
+    newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
+  - name: reiver-herd:latest
+    newName: ghcr.io/your-org/reiver-herd
+    newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
+  - name: reiver-docs:latest
+    newName: ghcr.io/your-org/reiver-docs
+    newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
+
+# Allow pulling private ghcr.io images. Create secret once: kubectl create secret docker-registry ghcr.io-pull-secret -n reiver --docker-server=ghcr.io --docker-username=YOUR_GITHUB_USER --docker-password=YOUR_TOKEN
+patches:
+  # Pond disabled — re-enable when Pond launches
+  # - path: pond-pgwire-nodeport.yaml
+  #   target:
+  #     kind: Service
+  #     name: reiver-pond-pgwire
+  - path: node-affinity-patch.yaml
+    target:
+      kind: Deployment
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-watch
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-watch-workers
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-flow
+  # Pond disabled — re-enable when Pond launches
+  # - path: image-pull-secret-patch.yaml
+  #   target:
+  #     kind: Deployment
+  #     name: reiver-pond
+  # - path: image-pull-secret-patch.yaml
+  #   target:
+  #     kind: Deployment
+  #     name: reiver-pond-workers
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-website
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-website-workers
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-mcp
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-herd
+  - path: image-pull-secret-patch.yaml
+    target:
+      kind: Deployment
+      name: reiver-docs

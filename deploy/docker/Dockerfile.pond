@@ -1,0 +1,17 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    libxml2 \
+    libxmlsec1 \
+    libxmlsec1-openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY output/reiver-pond /app/reiver-pond
+
+EXPOSE 3002
+EXPOSE 5433
+
+CMD ["./reiver-pond"]

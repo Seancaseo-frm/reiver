@@ -1,0 +1,12 @@
+# ClickHouse via official ClickHouse Kubernetes Operator.
+# The operator is deployed separately (see application-clickhouse-operator.yaml).
+# HTTP API on port 8123, native protocol on 9000.
+# Service: sample-clickhouse.reiver-infra.svc:8123
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: reiver-infra
+
+resources:
+  - keeper.yaml
+  - cluster.yaml

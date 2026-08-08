@@ -1,0 +1,110 @@
+{{ template "chart.header" . }}
+
+![drone](https://raw.githubusercontent.com/drone/brand/master/logos/vector/drone-logo-back-with-text.svg)
+
+{{ template "chart.description" . }}
+
+{{ template "chart.versionBadge" . }}{{ template "chart.typeBadge" . }}{{ template "chart.appVersionBadge" . }}
+
+## Official Documentation
+
+For detailed usage instructions, configuration options, and additional information about the `{{ template "chart.name" . }}` Helm chart, refer to the [official documentation](https://community-charts.github.io/docs/charts/{{ template "chart.name" . }}/usage).
+
+## Get Helm Repository Info
+
+```console
+helm repo add community-charts https://community-charts.github.io/helm-charts
+helm repo update
+```
+
+_See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentation._
+
+## Installing the Chart
+
+```console
+helm install [RELEASE_NAME] community-charts/{{ template "chart.name" . }}
+```
+
+_See [configuration](#configuration) below._
+
+_See [helm install](https://helm.sh/docs/helm/helm_install/) for command documentation._
+
+> **Tip**: Search all available chart versions using `helm search repo community-charts -l`. Please don't forget to run `helm repo update` before the command.
+
+## Values File Examples
+
+Please find the following example of Drone CI with Kubernetes Ingress and Postgres DB and Gitea integration.
+
+```yaml
+server:
+  ingress:
+    enabled: true
+    hosts:
+      - host: drone.example.com
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+
+  env:
+    DRONE_SERVER_HOST: drone.example.com
+    DRONE_SERVER_PROTO: http
+    DRONE_DATABASE_DRIVER: postgres
+    DRONE_GITEA_SERVER: http://gitea.example.com
+
+  secrets:
+    # openssl rand -hex 16
+    # DRONE_DATABASE_SECRET: a1501fdf503fbbdda9e736c1b020b8fc
+    DRONE_DATABASE_DATASOURCE: "postgres://postgres:postgres@postgres-service:5432/postgres?sslmode=disable"
+    # DRONE_GITEA_CLIENT_ID: 6a6e252b-8bad-4aeb-9178-ee8ed6b84150
+    # DRONE_GITEA_CLIENT_SECRET: RyJ3hmG2A4Q2MDMEO433qIkokbpR7QjEodxHTylMV7xj
+    DRONE_USER_CREATE: "username:testuser,admin:true"
+    DRONE_USER_FILTER: testuser
+```
+
+You can generate an database secret with `openssl rand -hex 16` command. Please never store any secret in your git repository. You can pass them with the helm set command. 
+
+```console
+helm upgrade --install drone community-charts/drone/ \
+  --set server.secrets.DRONE_DATABASE_SECRET="a1501fdf503fbbdda9e736c1b020b8fc" \
+  --set server.secrets.DRONE_GITEA_CLIENT_ID="6a6e252b-8bad-4aeb-9178-ee8ed6b84150" \
+  --set server.secrets.DRONE_GITEA_CLIENT_SECRET="RyJ3hmG2A4Q2MDMEO433qIkokbpR7QjEodxHTylMV7xj" \
+  --values values.yaml
+```
+
+{{ template "chart.requirementsSection" . }}
+
+## Uninstall Helm Chart
+
+```console
+helm uninstall [RELEASE_NAME]
+```
+
+This removes all the Kubernetes components associated with the chart and deletes the release.
+
+_See [helm uninstall](https://helm.sh/docs/helm/helm_uninstall/) for command documentation._
+
+## Upgrading Chart
+
+```console
+helm upgrade [RELEASE_NAME] community-charts/{{ template "chart.name" . }}
+```
+
+{{ template "chart.valuesSection" . }}
+
+## Support
+
+For questions, suggestions, and discussion, visit the [Drone community site](https://discourse.drone.io/).
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+## Chart Development
+
+Please install unittest helm plugin with `helm plugin install https://github.com/helm-unittest/helm-unittest.git` command and use following command to run helm unit tests.
+
+```console
+helm unittest --strict --file 'unittests/**/*.yaml' charts/{{ template "chart.name" . }}
+```
+
+{{ template "chart.maintainersSection" . }}

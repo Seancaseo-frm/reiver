@@ -1,0 +1,31 @@
+target/
+.env
+*.log
+.DS_Store
+node_modules/
+.next/
+dist/
+*.pyc
+__pycache__/
+.venv/
+venv/
+.idea
+
+# Server credentials (never commit)
+deploy/scripts/.server-credentials
+
+# Local-only tools (not committed)
+.local/
+
+# VitePress cache
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# fastembed model cache (downloaded at runtime)
+.fastembed_cache/
+
+# Non-project assets
+assets/
+*.pdf
+dashboard_templates_dump.json
+dashboard_templates_report.txt

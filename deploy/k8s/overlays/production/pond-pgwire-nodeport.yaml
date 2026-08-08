@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-pond-pgwire
+  namespace: reiver
+spec:
+  type: NodePort
+  ports:
+    - port: 5433
+      targetPort: pgwire
+      name: pgwire
+      nodePort: 30543

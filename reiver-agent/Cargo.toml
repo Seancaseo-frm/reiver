@@ -1,0 +1,111 @@
+[package]
+name = "reiver-agent"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+
+[dependencies]
+# CLI and config
+clap = { version = "4.4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+tokio = { version = "1", features = ["full"] }
+
+# System metrics
+sysinfo = "0.30"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "mysql", "chrono"] }
+md5 = "0.7"
+
+# SQL Server client (Tiberius)
+# Using native-tls instead of rustls to avoid tokio-rustls version conflicts
+tiberius = { version = "0.12", features = ["tokio", "native-tls"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+
+# Oracle client
+oracle = "0.5"
+
+# IBM Db2 client
+ibm_db = "1.0.6"
+
+# SAP HANA client
+hdbconnect_async = "0.32.0"
+
+# CockroachDB client (PostgreSQL-compatible, uses tokio-postgres)
+tokio-postgres = "0.7.15"
+
+# YugabyteDB client (PostgreSQL-compatible, uses yb-tokio-postgres)
+yb-tokio-postgres = "0.7.10-yb-1-beta.3"
+
+# Cassandra/ScyllaDB client
+scylla = "1.4.1"
+
+# FoundationDB client
+# Note: Requires FoundationDB client library to be installed on the system
+# Or use embedded-fdb-include feature to bundle it (increases binary size)
+foundationdb = { version = "0.10.0", features = ["fdb-7_4", "embedded-fdb-include"] }
+
+# ArangoDB client
+arangors = { version = "0.6.0", features = ["reqwest_async"] }
+
+# InfluxDB client
+influxdb = "0.7.2"
+
+# CouchDB client
+couch_rs = "0.12.1"
+
+# CouchBase client
+couchbase = "1.0.0-beta.1"
+
+# Presto/Trino client
+prusto = "0.5.2"
+
+# Redis client
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
+
+# MongoDB client
+mongodb = "3.4"
+
+# ClickHouse client  
+clickhouse = { version = "0.14", features = ["chrono"] }
+
+# Elasticsearch client (REST API)
+# Note: Using reqwest (already included) for Elasticsearch REST API calls
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# TLS for SSL certificate checks
+native-tls = "0.2"
+tokio-native-tls = "0.3"
+
+# URL parsing for health checks
+url = "2.5"
+
+# Daemon management (using raw libc for Unix)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+# windows-service = "0.6"  # Uncomment when adding Windows support
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
+
+# OpenTelemetry
+opentelemetry = "0.31.0"
+opentelemetry-otlp = { version = "0.31.0", features = ["trace", "metrics", "grpc-tonic", "http-proto"] }
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "metrics"] }
+tracing-opentelemetry = "0.32"
+
+# Other utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+anyhow = "1.0"
+regex = "1.10"  # For environment variable substitution in config
+async-trait = "0.1"  # For async trait methods
+serde_json = "1.0"  # For JSON parsing (Elasticsearch, MongoDB)
+
+[dev-dependencies]
+tempfile = "3.8"
+

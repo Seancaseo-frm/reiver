@@ -1,0 +1,18 @@
+{{- if .Values.kubeRunner.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: drone-build-policy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "drone.runnerLabels" . | nindent 4 }}
+data:
+  policy.yaml: |
+    ---
+    kind: policy
+    name: default
+    metadata:
+      namespace: drone-builds
+    node_selector:
+      reiver.io/role: ci
+{{- end }}

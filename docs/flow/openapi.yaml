@@ -1,0 +1,1758 @@
+openapi: 3.1.0
+info:
+  title: Reiver Flow API
+  description: LLM Gateway and Management API
+  version: 1.0.0
+
+servers:
+  - url: https://reiver.ai/api/gateway
+    description: Production
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "Reiver API key (dh_...)"
+
+  parameters:
+    ProjectIdHeader:
+      name: X-Project-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserIdHeader:
+      name: X-User-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectIdQuery:
+      name: project_id
+      in: query
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        maximum: 1000
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+    StartDate:
+      name: start_date
+      in: query
+      schema:
+        type: string
+        format: date
+    EndDate:
+      name: end_date
+      in: query
+      schema:
+        type: string
+        format: date
+
+  schemas:
+    # --- Gateway ---
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+          description: 'Model identifier (e.g. "gpt-4o", "claude-3-5-sonnet", "auto")'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        max_tokens:
+          type: integer
+          maximum: 1000000
+        top_p:
+          type: number
+          minimum: 0
+          maximum: 1
+        n:
+          type: integer
+          maximum: 10
+        stream:
+          type: boolean
+        stop:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        frequency_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        presence_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        user:
+          type: string
+        seed:
+          type: integer
+        tools:
+          type: array
+          items:
+            type: object
+        tool_choice:
+          oneOf:
+            - type: string
+            - type: object
+        response_format:
+          type: object
+        thinking:
+          type: object
+          properties:
+            type:
+              type: string
+            budget_tokens:
+              type: integer
+        reasoning_effort:
+          type: string
+          enum: [low, medium, high]
+        prompt_config:
+          type: string
+        prompt_variables:
+          type: object
+          additionalProperties:
+            type: string
+
+    ChatMessage:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: '#/components/schemas/ContentPart'
+        name:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            type: object
+        tool_call_id:
+          type: string
+
+    ContentPart:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [text, image_url, document_url]
+        text:
+          type: string
+        image_url:
+          type: object
+          properties:
+            url:
+              type: string
+        document_url:
+          type: object
+          properties:
+            url:
+              type: string
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion]
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  content:
+                    type: string
+                  tool_calls:
+                    type: array
+                    items:
+                      type: object
+              finish_reason:
+                type: string
+        usage:
+          $ref: '#/components/schemas/Usage'
+
+    Usage:
+      type: object
+      properties:
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+            code:
+              type: string
+
+    # --- Sessions ---
+    SessionSummary:
+      type: object
+      properties:
+        session_id:
+          type: string
+        session_name:
+          type: string
+        user_id:
+          type: string
+        first_request_time:
+          type: string
+          format: date-time
+        last_request_time:
+          type: string
+          format: date-time
+        request_count:
+          type: integer
+        total_tokens:
+          type: integer
+        total_cost_usd:
+          type: string
+        error_count:
+          type: integer
+        feedback_score:
+          type: integer
+          nullable: true
+
+    SessionDetail:
+      type: object
+      properties:
+        session_id:
+          type: string
+        session_name:
+          type: string
+        user_id:
+          type: string
+        first_request_time:
+          type: string
+          format: date-time
+        last_request_time:
+          type: string
+          format: date-time
+        request_count:
+          type: integer
+        total_input_tokens:
+          type: integer
+        total_output_tokens:
+          type: integer
+        total_cost_usd:
+          type: string
+        avg_latency_ms:
+          type: number
+        error_count:
+          type: integer
+        models:
+          type: array
+          items:
+            type: string
+        feedback_score:
+          type: integer
+          nullable: true
+        feedback_text:
+          type: string
+          nullable: true
+
+    # --- Scores ---
+    SubmitScoreRequest:
+      type: object
+      required: [project_id, request_id, score_name, score_value]
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
+        score_name:
+          type: string
+        score_value:
+          type: string
+        score_type:
+          type: string
+          enum: [number, boolean, category]
+          default: number
+        reason:
+          type: string
+        evaluator_type:
+          type: string
+        evaluator_id:
+          type: string
+
+    ScoreResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
+        score_name:
+          type: string
+        score_value:
+          type: string
+        score_type:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        evaluator_type:
+          type: string
+          nullable: true
+        evaluator_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # --- Settings ---
+    LlmSettings:
+      type: object
+      properties:
+        introspection_enabled:
+          type: boolean
+        thinking_budget_tokens:
+          type: integer
+        fallback_enabled:
+          type: boolean
+        fallback_order:
+          type: array
+          items:
+            type: string
+          nullable: true
+        retry_enabled:
+          type: boolean
+        retry_max_attempts:
+          type: integer
+        monthly_budget_usd:
+          type: number
+          nullable: true
+        budget_alert_enabled:
+          type: boolean
+        budget_hard_stop:
+          type: boolean
+        per_request_limit_usd:
+          type: number
+          nullable: true
+        rate_limit_enabled:
+          type: boolean
+        rate_limit_rpm:
+          type: integer
+        session_budget_usd:
+          type: number
+          nullable: true
+        guardrails:
+          $ref: '#/components/schemas/GuardrailConfig'
+        agent_enabled:
+          type: boolean
+          description: Whether the in-app AI agent is enabled for this project
+        agent_scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes the in-app agent is allowed to use (defaults to read-only)
+
+    GuardrailConfig:
+      type: object
+      properties:
+        trust_mode:
+          type: string
+          enum: [agent, chatbot]
+          nullable: true
+          description: Controls which message roles are treated as untrusted
+        blocked_input_topics:
+          type: array
+          items:
+            type: string
+        blocked_output_topics:
+          type: array
+          items:
+            type: string
+        max_prompt_tokens:
+          type: integer
+          nullable: true
+        pii_block_on_detect:
+          type: boolean
+        prompt_injection_detection:
+          type: boolean
+          description: Scan untrusted-role messages for injection patterns (requires trust_mode)
+        spotlighting_enabled:
+          type: boolean
+          description: Wrap untrusted-role messages in delimiters with a canary instruction (requires trust_mode)
+        mask_output_pii:
+          type: boolean
+        min_quality_score:
+          type: number
+          nullable: true
+        blocked_tools:
+          type: array
+          items:
+            type: string
+          description: Tool names blocked project-wide regardless of prompt
+        block_exfiltration_urls:
+          type: boolean
+          description: Block responses containing external image URLs (data exfiltration prevention)
+
+    # --- Prompt Configs ---
+    PromptConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        active_version_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # Template slot definitions; Flow deserializes with JSON key "type" (alias "var_type").
+    PromptVersionVariable:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Handlebars slot name (e.g. `topic` in `{{topic}}`)
+        type:
+          type: string
+          description: >
+            Logical type: `string`, `number`, `boolean`, `json`, or `enum`.
+            Legacy key `var_type` is accepted as an alias for the same value.
+        var_type:
+          type: string
+          deprecated: true
+          description: Same as `type` (alias for backward compatibility).
+        description:
+          type: string
+          nullable: true
+        required:
+          type: boolean
+        default: {}
+        values:
+          type: array
+          items:
+            type: string
+        max_chars:
+          type: integer
+        min:
+          type: number
+        max:
+          type: number
+
+    PromptVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        config_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        system_prompt:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        temperature:
+          type: string
+          nullable: true
+        max_tokens:
+          type: integer
+          nullable: true
+        parameters:
+          type: object
+          nullable: true
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVersionVariable'
+          nullable: true
+        tools:
+          type: object
+          nullable: true
+        response_format:
+          type: object
+          nullable: true
+        commit_message:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # --- Integrations ---
+    LlmIntegration:
+      type: object
+      properties:
+        provider:
+          type: string
+        enabled:
+          type: boolean
+        last_tested_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_test_status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # --- Pricing ---
+    ModelPricing:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        input_cost_per_1m:
+          type: string
+        output_cost_per_1m:
+          type: string
+        cache_read_cost_per_1m:
+          type: string
+          nullable: true
+        cache_write_cost_per_1m:
+          type: string
+          nullable: true
+        context_length:
+          type: integer
+          nullable: true
+        max_output_tokens:
+          type: integer
+          nullable: true
+        supports_vision:
+          type: boolean
+        supports_function_calling:
+          type: boolean
+        source:
+          type: string
+        last_updated:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+paths:
+  # =========================================================================
+  # Gateway
+  # =========================================================================
+  /v1/chat/completions:
+    post:
+      tags: [Gateway]
+      summary: Create a chat completion
+      description: Proxy an OpenAI-compatible chat completion request to the configured LLM provider. Supports streaming.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Chat completion response
+          headers:
+            x-reiver-provider:
+              schema:
+                type: string
+            x-reiver-model-used:
+              schema:
+                type: string
+            x-reiver-fallback-used:
+              schema:
+                type: string
+            x-reiver-retry-count:
+              schema:
+                type: string
+            x-reiver-cache:
+              schema:
+                type: string
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid API key
+        '429':
+          description: Session budget exceeded
+        '503':
+          description: Provider unavailable after retries
+
+  /v1/models:
+    get:
+      tags: [Gateway]
+      summary: List supported models
+      responses:
+        '200':
+          description: List of supported model prefixes
+
+  # =========================================================================
+  # Sessions
+  # =========================================================================
+  /api/llm/sessions:
+    get:
+      tags: [Sessions]
+      summary: List sessions
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: name_pattern
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+      responses:
+        '200':
+          description: Paginated session list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SessionSummary'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /api/llm/sessions/{session_id}:
+    get:
+      tags: [Sessions]
+      summary: Get session detail
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ProjectIdQuery'
+      responses:
+        '200':
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+
+  /api/llm/sessions/{session_id}/requests:
+    get:
+      tags: [Sessions]
+      summary: List session requests
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of requests in the session
+
+  /api/llm/sessions/{session_id}/feedback:
+    post:
+      tags: [Sessions]
+      summary: Submit session feedback
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                score:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                text:
+                  type: string
+      responses:
+        '200':
+          description: Feedback submitted
+
+  # =========================================================================
+  # Scores
+  # =========================================================================
+  /api/llm/scores:
+    post:
+      tags: [Scores]
+      summary: Submit an evaluation score
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitScoreRequest'
+      responses:
+        '200':
+          description: Score submitted
+    get:
+      tags: [Scores]
+      summary: List scores
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: score_name
+          in: query
+          schema:
+            type: string
+        - name: evaluator_type
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated score list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScoreResponse'
+
+  /api/llm/scores/request/{request_id}:
+    get:
+      tags: [Scores]
+      summary: Get scores for a request
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ProjectIdQuery'
+      responses:
+        '200':
+          description: Scores for the request
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScoreResponse'
+
+  /api/llm/scores/batch:
+    post:
+      tags: [Scores]
+      summary: Submit scores in batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, scores]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                scores:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Batch submitted
+
+  # =========================================================================
+  # Metrics
+  # =========================================================================
+  /api/llm/metrics/users:
+    get:
+      tags: [Metrics]
+      summary: Per-user usage metrics
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Per-user metrics
+
+  /api/llm/metrics/models:
+    get:
+      tags: [Metrics]
+      summary: Per-model metrics with latency percentiles
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Per-model metrics
+
+  /api/llm/metrics/cost/daily:
+    get:
+      tags: [Metrics]
+      summary: Daily cost breakdown
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Daily cost data
+
+  /api/llm/metrics/cost/by-model:
+    get:
+      tags: [Metrics]
+      summary: Cost breakdown by model
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Per-model cost data
+
+  /api/llm/metrics/overview:
+    get:
+      tags: [Metrics]
+      summary: Dashboard overview metrics
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+      responses:
+        '200':
+          description: Overview metrics
+
+  /api/llm/metrics/provider-latency:
+    get:
+      tags: [Metrics]
+      summary: Real-time provider latency
+      responses:
+        '200':
+          description: Provider latency data
+
+  # =========================================================================
+  # Pricing
+  # =========================================================================
+  /api/llm/pricing:
+    get:
+      tags: [Pricing]
+      summary: List model pricing
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [helicone, openrouter, manual]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated pricing list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ModelPricing'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /api/llm/pricing/sync:
+    post:
+      tags: [Pricing]
+      summary: Trigger pricing sync
+      responses:
+        '200':
+          description: Sync result
+
+  /api/llm/pricing/sync-history:
+    get:
+      tags: [Pricing]
+      summary: Get sync history
+      responses:
+        '200':
+          description: Last 50 sync entries
+
+  /api/llm/pricing/{provider}:
+    get:
+      tags: [Pricing]
+      summary: List pricing for a provider
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Provider pricing
+
+  /api/llm/pricing/{provider}/{model}:
+    put:
+      tags: [Pricing]
+      summary: Override model pricing
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: model
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input_cost_per_1m, output_cost_per_1m]
+              properties:
+                input_cost_per_1m:
+                  type: string
+                output_cost_per_1m:
+                  type: string
+                cache_read_cost_per_1m:
+                  type: string
+                cache_write_cost_per_1m:
+                  type: string
+      responses:
+        '200':
+          description: Pricing updated
+
+  # =========================================================================
+  # Prompts & Rollouts
+  # =========================================================================
+  /api/llm/prompts/configs:
+    post:
+      tags: [Prompts]
+      summary: Create a prompt config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, name]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Prompt config created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptConfig'
+    get:
+      tags: [Prompts]
+      summary: List prompt configs
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Prompt config list
+
+  /api/llm/prompts/configs/{config_id}:
+    get:
+      tags: [Prompts]
+      summary: Get a prompt config
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ProjectIdQuery'
+      responses:
+        '200':
+          description: Prompt config
+    put:
+      tags: [Prompts]
+      summary: Update a prompt config
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Prompts]
+      summary: Delete a prompt config
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ProjectIdQuery'
+      responses:
+        '200':
+          description: Deleted
+
+  /api/llm/prompts/configs/{config_id}/versions:
+    post:
+      tags: [Prompts]
+      summary: Create a prompt version
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/UserIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                system_prompt:
+                  type: string
+                model:
+                  type: string
+                temperature:
+                  type: string
+                max_tokens:
+                  type: integer
+                parameters:
+                  type: object
+                variables:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PromptVersionVariable'
+                tools:
+                  type: array
+                  items:
+                    type: object
+                response_format:
+                  type: object
+                commit_message:
+                  type: string
+      responses:
+        '201':
+          description: Version created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion'
+    get:
+      tags: [Prompts]
+      summary: List prompt versions
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Version list
+
+  /api/llm/prompts/configs/{config_id}/versions/{version_id}:
+    get:
+      tags: [Prompts]
+      summary: Get a prompt version
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ProjectIdQuery'
+      responses:
+        '200':
+          description: Prompt version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptVersion'
+
+  /api/llm/prompts/rollouts:
+    post:
+      tags: [Rollouts]
+      summary: Create a rollout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, config_id, target_version_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                config_id:
+                  type: string
+                  format: uuid
+                target_version_id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                mode:
+                  type: string
+                  enum: [auto, manual]
+                  default: auto
+                allocation_type:
+                  type: string
+                  enum: [random, user_sticky, session_sticky]
+                stages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      weight:
+                        type: integer
+                      min_duration_minutes:
+                        type: integer
+                      min_requests:
+                        type: integer
+                      max_error_rate_increase:
+                        type: string
+                      max_latency_increase_pct:
+                        type: string
+                      min_quality_score:
+                        type: string
+      responses:
+        '201':
+          description: Rollout created
+    get:
+      tags: [Rollouts]
+      summary: List rollouts
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdQuery'
+        - name: config_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Rollout list
+
+  /api/llm/prompts/rollouts/{rollout_id}:
+    get:
+      tags: [Rollouts]
+      summary: Get a rollout
+      parameters:
+        - name: rollout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ProjectIdQuery'
+      responses:
+        '200':
+          description: Rollout with stages
+
+  /api/llm/prompts/rollouts/{rollout_id}/start:
+    post:
+      tags: [Rollouts]
+      summary: Start a rollout
+      parameters:
+        - name: rollout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Rollout started
+
+  /api/llm/prompts/rollouts/{rollout_id}/pause:
+    post:
+      tags: [Rollouts]
+      summary: Pause a rollout
+      parameters:
+        - name: rollout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Rollout paused
+
+  /api/llm/prompts/rollouts/{rollout_id}/promote:
+    post:
+      tags: [Rollouts]
+      summary: Promote to next stage
+      parameters:
+        - name: rollout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Promoted
+
+  /api/llm/prompts/rollouts/{rollout_id}/rollback:
+    post:
+      tags: [Rollouts]
+      summary: Rollback a rollout
+      parameters:
+        - name: rollout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Rolled back
+
+  /api/llm/prompts/rollouts/{rollout_id}/complete:
+    post:
+      tags: [Rollouts]
+      summary: Force-complete a rollout
+      parameters:
+        - name: rollout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Completed
+
+  /api/llm/prompts/rollouts/{rollout_id}/metrics:
+    get:
+      tags: [Rollouts]
+      summary: Get rollout metrics
+      parameters:
+        - name: rollout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ProjectIdQuery'
+      responses:
+        '200':
+          description: Target vs baseline metrics comparison
+
+  # =========================================================================
+  # Playground
+  # =========================================================================
+  /api/llm/playground:
+    post:
+      tags: [Playground]
+      summary: Run a playground prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, messages]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                model:
+                  type: string
+                  default: auto
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                      content:
+                        oneOf:
+                          - type: string
+                          - type: array
+                            items:
+                              type: object
+                temperature:
+                  type: number
+                max_tokens:
+                  type: integer
+                auto_evaluate:
+                  type: boolean
+                use_fallback_chain:
+                  type: boolean
+                enable_introspection:
+                  type: boolean
+      responses:
+        '200':
+          description: Playground result
+
+  /api/llm/playground/compare:
+    post:
+      tags: [Playground]
+      summary: Compare models
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, messages, compare_models]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                messages:
+                  type: array
+                  items:
+                    type: object
+                compare_models:
+                  type: array
+                  items:
+                    type: string
+                  maxItems: 5
+      responses:
+        '200':
+          description: Model comparison results
+
+  # =========================================================================
+  # Search
+  # =========================================================================
+  /api/llm/search:
+    post:
+      tags: [Search]
+      summary: Text search on LLM requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, query]
+              properties:
+                project_id:
+                  type: string
+                  format: uuid
+                query:
+                  type: string
+                limit:
+                  type: integer
+                  default: 10
+                  maximum: 100
+                model:
+                  type: string
+                user_id:
+                  type: string
+                session_id:
+                  type: string
+                start_time:
+                  type: string
+                  format: date-time
+                end_time:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Search results
+
+  # =========================================================================
+  # Integrations
+  # =========================================================================
+  /api/llm/integrations:
+    get:
+      tags: [Integrations]
+      summary: List provider integrations
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdHeader'
+      responses:
+        '200':
+          description: Integration list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LlmIntegration'
+    post:
+      tags: [Integrations]
+      summary: Create a provider integration
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdHeader'
+        - $ref: '#/components/parameters/UserIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [openai, anthropic, google, bedrock, theta]
+                api_key:
+                  type: string
+                access_key_id:
+                  type: string
+                secret_access_key:
+                  type: string
+                region:
+                  type: string
+                enabled:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Integration created
+
+  /api/llm/integrations/{provider}:
+    put:
+      tags: [Integrations]
+      summary: Update a provider integration
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ProjectIdHeader'
+        - $ref: '#/components/parameters/UserIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                api_key:
+                  type: string
+                access_key_id:
+                  type: string
+                secret_access_key:
+                  type: string
+                region:
+                  type: string
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Integrations]
+      summary: Delete a provider integration
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ProjectIdHeader'
+        - $ref: '#/components/parameters/UserIdHeader'
+      responses:
+        '200':
+          description: Deleted
+
+  /api/llm/integrations/{provider}/test:
+    post:
+      tags: [Integrations]
+      summary: Test provider connection
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ProjectIdHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                api_key:
+                  type: string
+                access_key_id:
+                  type: string
+                secret_access_key:
+                  type: string
+                region:
+                  type: string
+      responses:
+        '200':
+          description: Connection successful
+
+  # =========================================================================
+  # Settings
+  # =========================================================================
+  /api/llm/settings:
+    get:
+      tags: [Settings]
+      summary: Get gateway settings
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdHeader'
+      responses:
+        '200':
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmSettings'
+    put:
+      tags: [Settings]
+      summary: Update gateway settings
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LlmSettings'
+      responses:
+        '200':
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmSettings'

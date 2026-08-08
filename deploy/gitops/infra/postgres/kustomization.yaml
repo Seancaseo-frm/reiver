@@ -1,0 +1,21 @@
+# CloudNativePG operator (Helm) + Cluster CR for reiver database.
+# App credentials: use postgres-cluster-superuser secret or create an app user; see deploy/k8s/SECRETS.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: reiver-infra
+
+helmCharts:
+  - name: cloudnative-pg
+    repo: https://cloudnative-pg.github.io/charts
+    version: "0.27.1"
+    releaseName: cloudnative-pg
+    namespace: reiver-infra
+    valuesInline:
+      # Run operator in same namespace as Cluster
+      configData:
+        INHERITED_ANNOTATIONS: ""
+        INHERITED_LABELS: ""
+
+resources:
+  - cluster.yaml

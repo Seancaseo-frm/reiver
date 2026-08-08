@@ -1,0 +1,79 @@
+services:
+  test-postgres:
+    image: postgres:16
+    container_name: reiver-test-postgres
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: testdb
+    ports:
+      - "15432:5432"
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+      - ./scripts/seed/postgres/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d testdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-mysql:
+    image: mysql:8.0
+    container_name: reiver-test-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+      MYSQL_DATABASE: testdb
+    ports:
+      - "13306:3306"
+    volumes:
+      - test_mysql_data:/var/lib/mysql
+      - ./scripts/seed/mysql/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "testuser", "-ptestpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-mongodb:
+    image: mongo:7
+    container_name: reiver-test-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: testuser
+      MONGO_INITDB_ROOT_PASSWORD: testpass
+      MONGO_INITDB_DATABASE: testdb
+    ports:
+      - "27018:27017"
+    volumes:
+      - test_mongodb_data:/data/db
+      - ./scripts/seed/mongodb/init.js:/docker-entrypoint-initdb.d/init.js
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: reiver-test-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "TestPass123!"
+      MSSQL_PID: Developer
+    ports:
+      - "11433:1433"
+    volumes:
+      - test_sqlserver_data:/var/opt/mssql
+      - ./scripts/seed/sqlserver/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPass123!' -Q 'SELECT 1' -C || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  test_postgres_data:
+  test_mysql_data:
+  test_mongodb_data:
+  test_sqlserver_data:

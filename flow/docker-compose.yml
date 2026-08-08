@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: reiver
+    ports:
+      - "5434:5432"
+    volumes:
+      - flow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ClickHouse is provided by the shared root docker-compose (port 8123).
+  # Start it with: docker-compose -f ../docker-compose.yml up -d
+  # Flow connects to it via host.docker.internal so website migrations apply to the same DB.
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    volumes:
+      - flow_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.1
+    ports:
+      - "9093:9092"
+    volumes:
+      - flow_redpanda_data:/var/lib/redpanda/data
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --mode
+      - dev-container
+      - --default-log-level=info
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flow:
+    build:
+      context: ..
+      dockerfile: flow/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/reiver
+      REDIS_URL: redis://redis:6379
+      # Use shared ClickHouse from root docker-compose (same DB as website migrations).
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://default:@host.docker.internal:8123}
+      KAFKA_HOSTS: redpanda:9092
+      CLICKHOUSE_KAFKA_HOSTS: redpanda:9092
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  flow_postgres_data:
+  flow_redis_data:
+  flow_redpanda_data:

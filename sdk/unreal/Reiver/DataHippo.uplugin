@@ -1,0 +1,31 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "DataHippo SDK",
+    "Description": "Game observability SDK for DataHippo APM. Auto-instrumentation for tick rate, frame times, crashes, memory, and network quality with OpenTelemetry v1.39.0 semantic conventions.",
+    "Category": "Analytics",
+    "CreatedBy": "DataHippo",
+    "CreatedByURL": "https://datahippo.io",
+    "DocsURL": "https://docs.datahippo.io/unreal",
+    "MarketplaceURL": "",
+    "SupportURL": "https://github.com/datahippo/unreal-sdk/issues",
+    "CanContainContent": false,
+    "IsBetaVersion": true,
+    "IsExperimentalVersion": false,
+    "Installed": false,
+    "Modules": [
+        {
+            "Name": "DataHippo",
+            "Type": "Runtime",
+            "LoadingPhase": "PreDefault",
+            "PlatformAllowList": [
+                "Win64",
+                "Mac",
+                "Linux",
+                "Android",
+                "IOS"
+            ]
+        }
+    ]
+}

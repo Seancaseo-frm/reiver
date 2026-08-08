@@ -1,0 +1,1126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "fullnameOverride": {
+      "default": "",
+      "description": "String to override the default generated fullname",
+      "required": [],
+      "title": "fullnameOverride",
+      "type": "string"
+    },
+    "global": {
+      "additionalProperties": true,
+      "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
+      "required": [],
+      "title": "global",
+      "type": "object"
+    },
+    "imagePullSecrets": {
+      "description": "Image pull secrets for private docker registry usages\nRef: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/",
+      "items": {
+        "required": []
+      },
+      "required": [],
+      "title": "imagePullSecrets",
+      "type": "array"
+    },
+    "kubeRunner": {
+      "additionalProperties": false,
+      "properties": {
+        "affinity": {
+          "additionalProperties": true,
+          "description": "Set the affinity for the kube runner pod.",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Specifies whether a kube runner should be created",
+          "required": [],
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "env": {
+          "additionalProperties": true,
+          "description": "# The keys within the \"envs\" map are mounted as environment variables on the Kubernetes runner pod.\n# See the full reference of Kubernetes runner environment variables here:\n# Ref: https://docs.drone.io/runner/kubernetes/installation/",
+          "properties": {
+            "DRONE_NAMESPACE_DEFAULT": {
+              "default": "default",
+              "description": "Determines the default Kubernetes namespace for Drone builds to run in.\nRef: https://docs.drone.io/runner/kubernetes/configuration/reference/drone-namespace-default/",
+              "required": [],
+              "title": "DRONE_NAMESPACE_DEFAULT",
+              "type": "string"
+            },
+            "DRONE_RPC_PROTO": {
+              "default": "http",
+              "description": "The protocol to use for communication with Drone server.\nRef: https://docs.drone.io/runner/kubernetes/configuration/reference/drone-rpc-proto/",
+              "required": [],
+              "title": "DRONE_RPC_PROTO",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "env",
+          "type": "object"
+        },
+        "extraSecretNamesForEnvFrom": {
+          "description": "If you'd like to provide your own Kubernetes Secret object instead of passing your values\nin un-encrypted, pass in the name of a created + populated Secret in the same Namespace\nas the Kubernetes runner. All secrets within this configmap will be mounted as environment\nvariables, with each key/value mapping to a corresponding environment variable on the\nKubernetes runner.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "extraSecretNamesForEnvFrom",
+          "type": "array"
+        },
+        "extraVolumeMounts": {
+          "description": "If you have declared extra volumes, mount them here, per the Pod Container's\n\"volumeMounts\" section.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "extraVolumeMounts",
+          "type": "array"
+        },
+        "extraVolumes": {
+          "description": "If you'd like to make additional files or volumes available to the runner, declare additional\nVolumes here per the Pod spec's \"volumes\" section.\nRef: https://kubernetes.io/docs/concepts/storage/volumes/",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "extraVolumes",
+          "type": "array"
+        },
+        "image": {
+          "additionalProperties": false,
+          "properties": {
+            "pullPolicy": {
+              "default": "IfNotPresent",
+              "description": "The kube runner image pull policy",
+              "required": [],
+              "title": "pullPolicy",
+              "type": "string",
+              "enum": ["IfNotPresent", "Never", "Always"]
+            },
+            "repository": {
+              "default": "drone/drone-runner-kube",
+              "description": "The kube runner docker image repository to use",
+              "required": [],
+              "title": "repository",
+              "type": "string"
+            },
+            "tag": {
+              "default": "1.0.0-rc.2",
+              "description": "The kube runner image tag to use",
+              "required": [],
+              "title": "tag",
+              "type": "string"
+            }
+          },
+          "required": ["repository", "tag", "pullPolicy"],
+          "title": "image",
+          "type": "object"
+        },
+        "ingress": {
+          "additionalProperties": false,
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Additional kube runner ingress annotations",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "className": {
+              "default": "",
+              "description": "Specifies if you want to use different ingress controller for kube runner",
+              "required": [],
+              "title": "className",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Specifies if you want to create an ingress access to kube runner",
+              "required": [],
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "hosts": {
+              "description": "kubernetes.io/ingress.class: nginx\nkubernetes.io/tls-acme: \"true\"",
+              "items": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "host": {
+                        "default": "chart-example.local",
+                        "required": [],
+                        "title": "host",
+                        "type": "string"
+                      },
+                      "paths": {
+                        "items": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "path": {
+                                  "default": "/",
+                                  "required": [],
+                                  "title": "path",
+                                  "type": "string"
+                                },
+                                "pathType": {
+                                  "default": "ImplementationSpecific",
+                                  "description": "Kube runner ingress path type",
+                                  "required": [],
+                                  "title": "pathType",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["path", "pathType"],
+                              "type": "object"
+                            }
+                          ],
+                          "required": []
+                        },
+                        "required": [],
+                        "title": "paths",
+                        "type": "array"
+                      }
+                    },
+                    "required": ["host", "paths"],
+                    "type": "object"
+                  }
+                ],
+                "required": []
+              },
+              "required": [],
+              "title": "hosts",
+              "type": "array"
+            },
+            "tls": {
+              "description": "Kube runner ingress tls configuration for https access",
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "tls",
+              "type": "array"
+            }
+          },
+          "required": ["enabled", "className", "annotations", "hosts", "tls"],
+          "title": "ingress",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "additionalProperties": true,
+          "description": "If you'd like to force the Drone runner to run on a specific node or set of nodes,\nset a selector here.",
+          "required": [],
+          "title": "nodeSelector",
+          "type": "object"
+        },
+        "podAnnotations": {
+          "additionalProperties": true,
+          "description": "Annotations for the kube runner pod",
+          "required": [],
+          "title": "podAnnotations",
+          "type": "object"
+        },
+        "podSecurityContext": {
+          "additionalProperties": true,
+          "description": "Security context for all kube runner pod",
+          "properties": {
+            "runAsUser": {
+              "default": 1000,
+              "required": [],
+              "title": "runAsUser",
+              "type": "integer"
+            },
+            "runAsGroup": {
+              "default": 3000,
+              "required": [],
+              "title": "runAsGroup",
+              "type": "integer"
+            },
+            "fsGroup": {
+              "default": 2000,
+              "required": [],
+              "title": "fsGroup",
+              "type": "integer"
+            },
+            "supplementalGroups": {
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "runAsUser",
+              "type": "array"
+            },
+            "fsGroupChangePolicy": {
+              "default": "OnRootMismatch",
+              "required": [],
+              "title": "fsGroupChangePolicy",
+              "type": "string",
+              "enum": ["OnRootMismatch", "Always"]
+            }
+          },
+          "required": [],
+          "title": "podSecurityContext",
+          "type": "object"
+        },
+        "rbac": {
+          "additionalProperties": false,
+          "description": "Each namespace listed below will be configured such that the runner can run build Pods in\nit. This comes in the form of a Role and a RoleBinding. If you change env.DRONE_NAMESPACE_DEFAULT\nor the other DRONE_NAMESPACE_* variables, make sure to update this list to include all\nnamespaces.",
+          "properties": {
+            "buildNamespaces": {
+              "items": {
+                "anyOf": [
+                  {
+                    "required": [],
+                    "type": "string"
+                  }
+                ],
+                "required": []
+              },
+              "required": [],
+              "title": "buildNamespaces",
+              "type": "array"
+            }
+          },
+          "required": ["buildNamespaces"],
+          "title": "rbac",
+          "type": "object"
+        },
+        "replicaCount": {
+          "default": 1,
+          "description": "(int) Numbers of runner replicas\nFor small or experimental deployments of the Kubernetes runner, 1 replica will suffice.\nFor production cases, 2-3 are recommended. This does not grant additional parallelism,\nbut does ensure that upgrades, config changes, and disruptions are handled more gracefully.",
+          "required": [],
+          "title": "replicaCount",
+          "type": "integer"
+        },
+        "resources": {
+          "additionalProperties": true,
+          "description": "Set the kube runner resources requests and limits",
+          "properties": {
+            "limits": {
+              "additionalProperties": true,
+              "properties": {
+                "cpu": {
+                  "default": "500m",
+                  "required": [],
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "1Gi",
+                  "required": [],
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "limits",
+              "type": "object"
+            },
+            "requests": {
+              "additionalProperties": true,
+              "properties": {
+                "cpu": {
+                  "default": "100m",
+                  "required": [],
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "128Mi",
+                  "required": [],
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "requests",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        },
+        "securityContext": {
+          "additionalProperties": true,
+          "description": "Security context for the kube runner container",
+          "properties": {
+            "allowPrivilegeEscalation": {
+              "default": false,
+              "required": [],
+              "title": "allowPrivilegeEscalation",
+              "type": "boolean"
+            },
+            "readOnlyRootFilesystem": {
+              "default": true,
+              "required": [],
+              "title": "readOnlyRootFilesystem",
+              "type": "boolean"
+            },
+            "runAsNonRoot": {
+              "default": true,
+              "required": [],
+              "title": "runAsNonRoot",
+              "type": "boolean"
+            },
+            "runAsUser": {
+              "default": 1000,
+              "required": [],
+              "title": "runAsUser",
+              "type": "integer"
+            },
+            "capabilities": {
+              "additionalProperties": true,
+              "properties": {
+                "drop": {
+                  "items": {
+                    "required": []
+                  },
+                  "required": [],
+                  "title": "drop",
+                  "type": "array"
+                },
+                "add": {
+                  "items": {
+                    "required": []
+                  },
+                  "required": [],
+                  "title": "add",
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "title": "capabilities",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "securityContext",
+          "type": "object"
+        },
+        "service": {
+          "additionalProperties": false,
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Additional kube runner service annotations",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "name": {
+              "default": "http",
+              "description": "Default Service name",
+              "required": [],
+              "title": "name",
+              "type": "string"
+            },
+            "port": {
+              "default": 3000,
+              "description": "Default kube runner Service port",
+              "required": [],
+              "title": "port",
+              "type": "integer"
+            },
+            "type": {
+              "default": "ClusterIP",
+              "description": "Specifies what type of kube runner Service should be created",
+              "required": [],
+              "title": "type",
+              "type": "string"
+            }
+          },
+          "required": ["type", "port", "annotations"],
+          "title": "service",
+          "type": "object"
+        },
+        "serviceAccount": {
+          "additionalProperties": false,
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Annotations to add to the kube runner service account",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "automount": {
+              "default": true,
+              "description": "Automatically mount a ServiceAccount's API credentials?",
+              "required": [],
+              "title": "automount",
+              "type": "boolean"
+            },
+            "create": {
+              "default": true,
+              "description": "Specifies whether a kube runner service account should be created",
+              "required": [],
+              "title": "create",
+              "type": "boolean"
+            },
+            "name": {
+              "default": "",
+              "description": "The name of the kube runner service account to use.\nIf not set and create is true, a name is generated using the fullname template",
+              "required": [],
+              "title": "name",
+              "type": "string"
+            }
+          },
+          "required": ["create", "automount", "annotations", "name"],
+          "title": "serviceAccount",
+          "type": "object"
+        },
+        "terminationGracePeriodSeconds": {
+          "default": 3600,
+          "description": "When the runner receives a SIGTERM/SIGINT (config update, upgrade, etc), it will wait until\nall jobs that particular pod has spawned complete. It is for this reason that you'll want\nto make sure that this value is longer than your longest job.",
+          "required": [],
+          "title": "terminationGracePeriodSeconds",
+          "type": "integer"
+        },
+        "tolerations": {
+          "description": "Set the tolerations for the kube runner pod.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "tolerations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled",
+        "replicaCount",
+        "image",
+        "serviceAccount",
+        "podAnnotations",
+        "terminationGracePeriodSeconds",
+        "podSecurityContext",
+        "securityContext",
+        "service",
+        "ingress",
+        "resources",
+        "nodeSelector",
+        "tolerations",
+        "affinity",
+        "extraVolumes",
+        "extraVolumeMounts",
+        "extraSecretNamesForEnvFrom",
+        "rbac",
+        "env"
+      ],
+      "title": "kubeRunner",
+      "type": "object"
+    },
+    "nameOverride": {
+      "default": "",
+      "description": "String to override the default generated name",
+      "required": [],
+      "title": "nameOverride",
+      "type": "string"
+    },
+    "secretsExtension": {
+      "additionalProperties": false,
+      "description": "Drone Kubernetes secrets extension: runner resolves from_secret from K8s Secret (e.g. drone-repo-secrets). Requires secret drone-secret-plugin with DRONE_SECRET_PLUGIN_TOKEN. When enabled with sidecar true (default), extension runs in the same pod as the runner per docs.drone.io/runner/extensions/kube/.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Deploy the drone/kubernetes-secrets extension as sidecar in runner pod and wire the runner to it",
+          "required": [],
+          "title": "enabled",
+          "type": "boolean"
+        }
+      },
+      "required": ["enabled"],
+      "title": "secretsExtension",
+      "type": "object"
+    },
+    "server": {
+      "additionalProperties": false,
+      "properties": {
+        "affinity": {
+          "additionalProperties": true,
+          "description": "Set the affinity for the drone server pod.",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
+        "emptyDir": {
+          "additionalProperties": true,
+          "description": "If persistentVolume.enabled is set to false, Drone will mount an emptyDir instead of\na PVC for any state that it needs to persist.",
+          "properties": {
+            "sizeLimit": {
+              "default": "",
+              "description": "Total space to request for the emptyDir. An empty value here means no limit.",
+              "required": [],
+              "title": "sizeLimit",
+              "type": "string"
+            }
+          },
+          "required": ["sizeLimit"],
+          "title": "emptyDir",
+          "type": "object"
+        },
+        "env": {
+          "additionalProperties": true,
+          "properties": {
+            "DRONE_GIT_ALWAYS_AUTH": {
+              "default": false,
+              "description": "If you are using self-hosted GitHub or GitLab, you'll need to set this to true.\nRef: https://docs.drone.io/server/reference/drone-git-always-auth/",
+              "required": [],
+              "title": "DRONE_GIT_ALWAYS_AUTH",
+              "type": "boolean"
+            },
+            "DRONE_SERVER_HOST": {
+              "default": "drone.example.com",
+              "description": "REQUIRED: Set the user-visible Drone hostname, sans protocol.\nRef: https://docs.drone.io/server/reference/drone-server-host/",
+              "required": [],
+              "title": "DRONE_SERVER_HOST",
+              "type": "string"
+            },
+            "DRONE_SERVER_PROTO": {
+              "default": "http",
+              "description": "The protocol to pair with the value in DRONE_SERVER_HOST (http or https).\nRef: https://docs.drone.io/server/reference/drone-server-proto/",
+              "required": [],
+              "title": "DRONE_SERVER_PROTO",
+              "type": "string"
+            },
+            "DRONE_DATABASE_DRIVER": {
+              "default": "postgres",
+              "description": "If you'd like to use a DB other than SQLite (the default), set a driver + DSN here.\nRef: https://docs.drone.io/server/storage/database/",
+              "required": [],
+              "title": "DRONE_DATABASE_DRIVER",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "env",
+          "type": "object"
+        },
+        "extraVolumeMounts": {
+          "description": "If you have declared extra volumes, mount them here, per the Pod Container's\n\"volumeMounts\" section.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "extraVolumeMounts",
+          "type": "array"
+        },
+        "extraVolumes": {
+          "description": "If you'd like to make additional files or volumes available to Drone, declare additional\nVolumes here per the Pod spec's \"volumes\" section.\nRef: https://kubernetes.io/docs/concepts/storage/volumes/",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "extraVolumes",
+          "type": "array"
+        },
+        "image": {
+          "additionalProperties": false,
+          "properties": {
+            "pullPolicy": {
+              "default": "IfNotPresent",
+              "description": "The drone server image pull policy",
+              "required": [],
+              "title": "pullPolicy",
+              "type": "string",
+              "enum": ["IfNotPresent", "Never", "Always"]
+            },
+            "repository": {
+              "default": "drone/drone",
+              "description": "The drone server docker image repository to use",
+              "required": [],
+              "title": "repository",
+              "type": "string"
+            },
+            "tag": {
+              "default": "",
+              "description": "The drone server image tag to use. Default app version",
+              "required": [],
+              "title": "tag",
+              "type": "string"
+            }
+          },
+          "required": ["repository", "tag", "pullPolicy"],
+          "title": "image",
+          "type": "object"
+        },
+        "ingress": {
+          "additionalProperties": false,
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Additional drone server ingress annotations",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "className": {
+              "default": "",
+              "description": "Specifies if you want to use different ingress controller for drone server",
+              "required": [],
+              "title": "className",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Specifies if you want to create an ingress access to drone server",
+              "required": [],
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "hosts": {
+              "description": "kubernetes.io/ingress.class: nginx\nkubernetes.io/tls-acme: \"true\"",
+              "items": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "host": {
+                        "default": "chart-example.local",
+                        "required": [],
+                        "title": "host",
+                        "type": "string"
+                      },
+                      "paths": {
+                        "items": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "path": {
+                                  "default": "/",
+                                  "required": [],
+                                  "title": "path",
+                                  "type": "string"
+                                },
+                                "pathType": {
+                                  "default": "ImplementationSpecific",
+                                  "description": "Drone server ingress path type",
+                                  "required": [],
+                                  "title": "pathType",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["path", "pathType"],
+                              "type": "object"
+                            }
+                          ],
+                          "required": []
+                        },
+                        "required": [],
+                        "title": "paths",
+                        "type": "array"
+                      }
+                    },
+                    "required": ["host", "paths"],
+                    "type": "object"
+                  }
+                ],
+                "required": []
+              },
+              "required": [],
+              "title": "hosts",
+              "type": "array"
+            },
+            "tls": {
+              "description": "Drone server ingress tls configuration for https access",
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "tls",
+              "type": "array"
+            }
+          },
+          "required": ["enabled", "className", "annotations", "hosts", "tls"],
+          "title": "ingress",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "additionalProperties": true,
+          "description": "Set the node selector for the drone server pod.",
+          "required": [],
+          "title": "nodeSelector",
+          "type": "object"
+        },
+        "persistentVolume": {
+          "additionalProperties": false,
+          "properties": {
+            "accessModes": {
+              "description": "Drone server data Persistent Volume access modes\nMust match those of existing PV or dynamic provisioner\nRef: http://kubernetes.io/docs/user-guide/persistent-volumes/",
+              "items": {
+                "anyOf": [
+                  {
+                    "required": [],
+                    "type": "string"
+                  }
+                ],
+                "required": []
+              },
+              "required": [],
+              "title": "accessModes",
+              "type": "array"
+            },
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Drone server data Persistent Volume annotations",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "enabled": {
+              "default": true,
+              "description": "If you are using SQLite as your DB for Drone, it is recommended to enable persistence. If\nenabled, the Chart will create a PersistentVolumeClaim to store its state in. If you are\nusing a DB other than SQLite, set this to false to avoid allocating unused storage.\nIf set to false, Drone will use an emptyDir instead, which is ephemeral.",
+              "required": [],
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "existingClaim": {
+              "default": "",
+              "description": "If you'd like to bring your own PVC for persisting Drone state, pass the name of the\ncreated + ready PVC here. If set, this Chart will not create the default PVC.\nRequires server.persistentVolume.enabled: true",
+              "required": [],
+              "title": "existingClaim",
+              "type": "string"
+            },
+            "mountPath": {
+              "default": "/data",
+              "description": "Drone server data Persistent Volume mount root path",
+              "required": [],
+              "title": "mountPath",
+              "type": "string"
+            },
+            "size": {
+              "default": "8Gi",
+              "description": "Drone server data Persistent Volume size",
+              "required": [],
+              "title": "size",
+              "type": "string"
+            },
+            "storageClass": {
+              "default": "",
+              "description": "Drone server data Persistent Volume Storage Class\nIf defined, storageClassName: \u003cstorageClass\u003e\nIf set to \"-\", storageClassName: \"\", which disables dynamic provisioning\nIf undefined (the default) or set to null, no storageClassName spec is\n  set, choosing the default provisioner.  (gp2 on AWS, standard on\n  GKE, AWS \u0026 OpenStack)",
+              "required": [],
+              "title": "storageClass",
+              "type": "string"
+            },
+            "subPath": {
+              "default": "",
+              "description": "Subdirectory of Drone server data Persistent Volume to mount\nUseful if the volume's root directory is not empty",
+              "required": [],
+              "title": "subPath",
+              "type": "string"
+            },
+            "volumeMode": {
+              "default": "",
+              "description": "Drone server data Persistent Volume Binding Mode\nIf defined, volumeMode: \u003cvolumeMode\u003e\nIf empty (the default) or set to null, no volumeBindingMode spec is\nset, choosing the default mode.",
+              "required": [],
+              "title": "volumeMode",
+              "type": "string"
+            }
+          },
+          "required": [
+            "enabled",
+            "accessModes",
+            "annotations",
+            "existingClaim",
+            "mountPath",
+            "size",
+            "storageClass",
+            "volumeMode",
+            "subPath"
+          ],
+          "title": "persistentVolume",
+          "type": "object"
+        },
+        "podAnnotations": {
+          "additionalProperties": true,
+          "description": "Annotations for the drone server pod",
+          "required": [],
+          "title": "podAnnotations",
+          "type": "object"
+        },
+        "podSecurityContext": {
+          "additionalProperties": true,
+          "description": "Security context for all drone server pod",
+          "properties": {
+            "runAsUser": {
+              "default": 1000,
+              "required": [],
+              "title": "runAsUser",
+              "type": "integer"
+            },
+            "runAsGroup": {
+              "default": 3000,
+              "required": [],
+              "title": "runAsGroup",
+              "type": "integer"
+            },
+            "fsGroup": {
+              "default": 2000,
+              "required": [],
+              "title": "fsGroup",
+              "type": "integer"
+            },
+            "supplementalGroups": {
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "runAsUser",
+              "type": "array"
+            },
+            "fsGroupChangePolicy": {
+              "default": "OnRootMismatch",
+              "required": [],
+              "title": "fsGroupChangePolicy",
+              "type": "string",
+              "enum": ["OnRootMismatch", "Always"]
+            }
+          },
+          "required": [],
+          "title": "podSecurityContext",
+          "type": "object"
+        },
+        "replicaCount": {
+          "default": 1,
+          "description": "(int) Numbers of server replicas",
+          "required": [],
+          "title": "replicaCount",
+          "type": "integer"
+        },
+        "resources": {
+          "additionalProperties": true,
+          "description": "Set the drone server resources requests and limits",
+          "properties": {
+            "limits": {
+              "additionalProperties": true,
+              "properties": {
+                "cpu": {
+                  "default": "500m",
+                  "required": [],
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "1Gi",
+                  "required": [],
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "limits",
+              "type": "object"
+            },
+            "requests": {
+              "additionalProperties": true,
+              "properties": {
+                "cpu": {
+                  "default": "100m",
+                  "required": [],
+                  "title": "cpu",
+                  "type": "string"
+                },
+                "memory": {
+                  "default": "128Mi",
+                  "required": [],
+                  "title": "memory",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "requests",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": true,
+          "description": "Drone server secrets",
+          "required": [],
+          "title": "secrets",
+          "type": "object"
+        },
+        "securityContext": {
+          "additionalProperties": true,
+          "description": "Security context for the drone server container",
+          "properties": {
+            "allowPrivilegeEscalation": {
+              "default": false,
+              "required": [],
+              "title": "allowPrivilegeEscalation",
+              "type": "boolean"
+            },
+            "readOnlyRootFilesystem": {
+              "default": true,
+              "required": [],
+              "title": "readOnlyRootFilesystem",
+              "type": "boolean"
+            },
+            "runAsNonRoot": {
+              "default": true,
+              "required": [],
+              "title": "runAsNonRoot",
+              "type": "boolean"
+            },
+            "runAsUser": {
+              "default": 1000,
+              "required": [],
+              "title": "runAsUser",
+              "type": "integer"
+            },
+            "capabilities": {
+              "additionalProperties": true,
+              "properties": {
+                "drop": {
+                  "items": {
+                    "required": []
+                  },
+                  "required": [],
+                  "title": "drop",
+                  "type": "array"
+                },
+                "add": {
+                  "items": {
+                    "required": []
+                  },
+                  "required": [],
+                  "title": "add",
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "title": "capabilities",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "securityContext",
+          "type": "object"
+        },
+        "service": {
+          "additionalProperties": false,
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Additional drone server service annotations",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "name": {
+              "default": "http",
+              "description": "Default Service name",
+              "required": [],
+              "title": "name",
+              "type": "string"
+            },
+            "port": {
+              "default": 80,
+              "description": "Default drone server Service port",
+              "required": [],
+              "title": "port",
+              "type": "integer"
+            },
+            "type": {
+              "default": "ClusterIP",
+              "description": "Specifies what type of drone server Service should be created",
+              "required": [],
+              "title": "type",
+              "type": "string"
+            }
+          },
+          "required": ["type", "port", "name", "annotations"],
+          "title": "service",
+          "type": "object"
+        },
+        "serviceAccount": {
+          "additionalProperties": false,
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "Annotations to add to the drone server service account.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "automount": {
+              "default": true,
+              "description": "Automatically mount a ServiceAccount's API credentials?",
+              "required": [],
+              "title": "automount",
+              "type": "boolean"
+            },
+            "create": {
+              "default": true,
+              "description": "Specifies whether a Drone server ServiceAccount should be created",
+              "required": [],
+              "title": "create",
+              "type": "boolean"
+            },
+            "name": {
+              "default": "",
+              "description": "The name of the drone server service account to use.\nIf not set and create is true, a name is generated using the fullname template",
+              "required": [],
+              "title": "name",
+              "type": "string"
+            }
+          },
+          "required": ["create", "automount", "annotations", "name"],
+          "title": "serviceAccount",
+          "type": "object"
+        },
+        "tolerations": {
+          "description": "Set the tolerations for the drone server pod.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "tolerations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "replicaCount",
+        "image",
+        "serviceAccount",
+        "podAnnotations",
+        "podSecurityContext",
+        "securityContext",
+        "service",
+        "ingress",
+        "resources",
+        "env",
+        "secrets",
+        "nodeSelector",
+        "tolerations",
+        "affinity",
+        "extraVolumes",
+        "extraVolumeMounts",
+        "persistentVolume",
+        "emptyDir"
+      ],
+      "title": "server",
+      "type": "object"
+    }
+  },
+  "required": [
+    "imagePullSecrets",
+    "nameOverride",
+    "fullnameOverride",
+    "server",
+    "kubeRunner"
+  ],
+  "type": "object"
+}

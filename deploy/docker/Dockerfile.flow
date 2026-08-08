@@ -1,0 +1,8 @@
+FROM debian:trixie-slim
+RUN apt-get update && apt-get install -y \
+    ca-certificates libssl3t64 libxml2 libxmlsec1t64 libxmlsec1t64-openssl \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY output/reiver-flow .
+EXPOSE 3001
+CMD ["./reiver-flow"]

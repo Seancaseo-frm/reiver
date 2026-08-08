@@ -1,0 +1,320 @@
+# OpenTelemetry Collector -- DaemonSet for K8s infrastructure metrics and container logs.
+# Sends OTLP HTTP to the in-cluster Watch service with X-Project-Id.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: reiver
+data:
+  config.yaml: |
+    receivers:
+      hostmetrics:
+        root_path: /hostfs
+        collection_interval: 30s
+        scrapers:
+          cpu: {}
+          memory: {}
+          disk: {}
+          filesystem: {}
+          network: {}
+          load: {}
+
+      kubeletstats:
+        auth_type: serviceAccount
+        collection_interval: 30s
+        endpoint: "https://${env:K8S_NODE_NAME}:10250"
+        insecure_skip_verify: true
+        metric_groups:
+          - node
+          - pod
+          - container
+
+      k8s_cluster:
+        auth_type: serviceAccount
+        collection_interval: 30s
+        allocatable_types_to_report:
+          - cpu
+          - memory
+          - pods
+
+      file_log:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          - /var/log/pods/*/otel-collector*/*.log
+        include_file_path: true
+        include_file_name: false
+        operators:
+          - id: container-parser
+            type: container
+          - id: clickhouse-severity
+            type: regex_parser
+            if: 'resource["k8s.container.name"] != nil and resource["k8s.container.name"] matches "clickhouse"'
+            regex: '<(?P<clickhouse_level>Trace|Debug|Information|Warning|Error|Fatal)>'
+            severity:
+              parse_from: attributes.clickhouse_level
+              mapping:
+                trace: Trace
+                debug: Debug
+                info: Information
+                warn: Warning
+                error: Error
+                fatal: Fatal
+
+      redis:
+        endpoint: "redis-master.reiver-infra.svc:6379"
+        collection_interval: 30s
+
+      # Infra database metrics (scraped from built-in Prometheus endpoints)
+      prometheus/infra:
+        config:
+          scrape_configs:
+            - job_name: clickhouse
+              scrape_interval: 30s
+              dns_sd_configs:
+                - names: ["clickhouse-clickhouse-headless.reiver-infra.svc"]
+                  type: A
+                  port: 9363
+            - job_name: redpanda
+              scrape_interval: 30s
+              metrics_path: /public_metrics
+              static_configs:
+                - targets: ["redpanda.reiver-infra.svc:9644"]
+            - job_name: postgres
+              scrape_interval: 30s
+              static_configs:
+                - targets:
+                    - "postgres-exporter.reiver-infra.svc:9187"
+                    - "postgres-exporter-replica.reiver-infra.svc:9187"
+            - job_name: argocd
+              scrape_interval: 30s
+              static_configs:
+                - targets:
+                    - "argocd-metrics.argocd.svc:8082"
+                    - "argocd-server-metrics.argocd.svc:8083"
+                    - "argocd-repo-server.argocd.svc:8084"
+                    - "argocd-notifications-controller-metrics.argocd.svc:9001"
+
+    processors:
+      memory_limiter:
+        limit_mib: 400
+        spike_limit_mib: 100
+        check_interval: 5s
+
+      batch:
+        timeout: 5s
+        send_batch_size: 1000
+        send_batch_max_size: 1500
+
+      k8s_attributes:
+        auth_type: serviceAccount
+        passthrough: false
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.name
+              - from: resource_attribute
+                name: k8s.namespace.name
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.namespace.name
+            - k8s.node.name
+            - k8s.deployment.name
+            - k8s.statefulset.name
+            - k8s.daemonset.name
+            - k8s.job.name
+            - k8s.container.name
+          labels:
+            - tag_name: app
+              key: app
+              from: pod
+
+      transform/service_name:
+        log_statements:
+          - context: resource
+            statements:
+              - set(attributes["service.name"], attributes["app"]) where (attributes["service.name"] == nil or attributes["service.name"] == "") and attributes["app"] != nil
+              - set(attributes["service.name"], attributes["k8s.container.name"]) where (attributes["service.name"] == nil or attributes["service.name"] == "") and attributes["k8s.container.name"] != nil
+
+      resource:
+        attributes:
+          - key: k8s.cluster.name
+            value: reiver
+            action: upsert
+      resource/host:
+        attributes:
+          - key: k8s.cluster.name
+            value: reiver
+            action: upsert
+          - key: host.name
+            value: "${env:K8S_NODE_NAME}"
+            action: upsert
+
+    exporters:
+      otlp_http:
+        endpoint: "http://reiver-watch:3000/api"
+        headers:
+          X-Project-Id: "${env:OTEL_PROJECT_ID}"
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        metrics/k8s:
+          receivers: [hostmetrics, kubeletstats, k8s_cluster]
+          processors: [memory_limiter, k8s_attributes, resource/host, batch]
+          exporters: [otlp_http]
+        metrics/infra:
+          receivers: [prometheus/infra, redis]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp_http]
+        logs:
+          receivers: [file_log]
+          processors: [memory_limiter, k8s_attributes, resource, transform/service_name, batch]
+          exporters: [otlp_http]
+
+      telemetry:
+        logs:
+          level: info
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: reiver
+  labels:
+    app: otel-collector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+  labels:
+    app: otel-collector
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes, nodes/stats, namespaces, endpoints, services, replicationcontrollers, resourcequotas, events]
+    verbs: [get, list, watch]
+  - apiGroups: ["apps"]
+    resources: [replicasets, deployments, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: ["batch"]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: ["autoscaling"]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - nonResourceURLs: ["/metrics"]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+  labels:
+    app: otel-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: reiver
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: reiver
+  labels:
+    app: otel-collector
+spec:
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.149.0
+          args: ["--config=/etc/otelcol-contrib/config.yaml"]
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: OTEL_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: otel-collector
+                  key: OTEL_PROJECT_ID
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib
+              readOnly: true
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: hostfs-proc
+              mountPath: /hostfs/proc
+              readOnly: true
+            - name: hostfs-sys
+              mountPath: /hostfs/sys
+              readOnly: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "250m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+            items:
+              - key: config.yaml
+                path: config.yaml
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: hostfs-proc
+          hostPath:
+            path: /proc
+        - name: hostfs-sys
+          hostPath:
+            path: /sys
+      tolerations:
+        - operator: Exists

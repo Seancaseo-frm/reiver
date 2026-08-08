@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pricing-sync
+  namespace: reiver
+  labels:
+    app: pricing-sync
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 30
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: pricing-sync
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.7.1
+              command:
+                - curl
+                - -sf
+                - -X
+                - POST
+                - -H
+                - "Content-Type: application/json"
+                - -d
+                - '{"event_type":"scheduled_pricing_sync","project_id":"07ce3ace-5133-496a-ba55-9bf40bb5d3aa"}'
+                - http://reiver-watch.reiver.svc:3000/api/internal/emit-scheduled-event
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "16Mi"
+                limits:
+                  cpu: "50m"
+                  memory: "32Mi"

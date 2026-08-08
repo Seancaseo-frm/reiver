@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-docs
+  namespace: reiver
+  labels:
+    app: reiver-docs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reiver-docs
+  template:
+    metadata:
+      labels:
+        app: reiver-docs
+    spec:
+      containers:
+        - name: nginx
+          image: reiver-docs:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-docs
+  namespace: reiver
+  labels:
+    app: reiver-docs
+spec:
+  selector:
+    app: reiver-docs
+  ports:
+    - port: 80
+      targetPort: http
+      name: http
+  type: ClusterIP

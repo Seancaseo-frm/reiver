@@ -1,0 +1,25 @@
+# Argo CD Application: Reiver app (production overlay).
+# Replace REPLACE_REPO_URL with your repo URL before applying.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reiver-app-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: reiver
+  source:
+    repoURL: REPLACE_REPO_URL
+    path: deploy/gitops/app/overlays/production
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: reiver
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

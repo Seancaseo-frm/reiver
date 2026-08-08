@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-website
+  namespace: reiver
+  labels:
+    app: reiver-website
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: reiver-website
+  template:
+    metadata:
+      labels:
+        app: reiver-website
+    spec:
+      containers:
+        - name: api
+          image: reiver-website:latest
+          imagePullPolicy: Always
+          command: ["./reiver-website"]
+          args: ["--mode", "api"]
+          ports:
+            - containerPort: 3003
+              name: http
+          envFrom:
+            - secretRef:
+                name: reiver-website
+          env:
+            - name: ENVIRONMENT
+              value: "production"
+            - name: CORS_ALLOWED_ORIGINS
+              value: "https://reiver.ai"
+            - name: ALLOW_SIGNUP
+              value: "true"
+            - name: MCP_URL
+              value: "http://reiver-mcp:3002"
+            - name: HERD_URL
+              value: "http://reiver-herd:3003"
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-website,service.version=c04e23aedba7f78a13bdb35e70baf1a7351bd9ea"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-website
+  namespace: reiver
+  labels:
+    app: reiver-website
+spec:
+  selector:
+    app: reiver-website
+  ports:
+    - port: 3003
+      targetPort: http
+      name: http
+  type: ClusterIP

@@ -1,0 +1,133 @@
+What BI Tools Are Bad At (Where You Add Value)
+1. Connecting to many sources. Looker Studio, Tableau, Power BI, Metabase — they all expect you to point them at one database. If a user has data in Postgres, Stripe, a CSV, and a MongoDB, the BI tool can't join across them. Your federated query engine can. You become the single SQL endpoint the BI tool connects to, and behind the scenes you're federating across everything.
+2. Performance on raw sources. BI dashboards generate aggressive queries (GROUP BYs, date range scans, etc.) and hit them repeatedly as users interact. Pointing Tableau directly at a production Postgres is a recipe for outages. Your materialization tiers solve this — data gets materialized into Parquet or accelerated into ClickHouse, so the BI tool hits fast pre-materialized data instead of hammering production databases.
+3. Cost control. BI users have no awareness of query cost. They drag and drop dimensions and the tool generates a 15-way join scanning terabytes. Your cost estimation and budget controls act as a safety net — something no BI tool provides natively.
+4. Data freshness visibility. BI tools show you data but don't tell you if it's stale. Your freshness tracking can surface that: "this dashboard is based on data that's 12 hours old because the sync to Postgres failed."
+The Gap You'd Need to Close
+Right now your warehouse query API is HTTP-based (POST /warehouse/query and /warehouse/query/stream). BI tools don't speak HTTP REST — they connect via database wire protocols. To sit between users and BI tools, you'd need one of:
+PostgreSQL wire protocol — This is the most universal. Tableau, Metabase, Looker, Superset, DBeaver, and nearly every BI tool can connect to a "Postgres" database. Projects like PgWire in Rust let you implement a Postgres-compatible server that translates incoming SQL to your query engine. This is what Cube, ClickHouse (via clickhouse-postgresql), and DuckDB's Postgres scanner do.
+ClickHouse HTTP/native interface — Some BI tools (Grafana, Metabase, Superset) have native ClickHouse connectors. Since your accelerated tier already lives in ClickHouse, you could expose that ClickHouse directly. But this only works for accelerated-mode sources and bypasses your federation, cost controls, and access management.
+ODBC/JDBC driver — More work to build, broader compatibility, but rarely worth it when Postgres wire protocol covers 95% of tools.
+What the Positioning Looks Like
+You wouldn't market this as "we compete with Looker" — you'd position it as:
+> "Connect your BI tool to one endpoint. We handle the rest — federation across all your sources, automatic materialization for performance, cost controls so dashboards don't break production, and freshness tracking so you know when data is stale."
+The BI tool becomes the visualization layer. You become the semantic data access layer — security, performance, federation, and cost governance in one place.
+Where Your Three Services Compound
+Warehouse provides the query engine, federation, materialization, and cost controls
+Monitoring provides freshness alerts, sync failure alerts, and query performance tracking on the BI workload itself ("this Tableau dashboard runs a query that takes 45 seconds — here's why")
+LLM Gateway enables a parallel path: users who don't want to use a BI tool at all can ask questions in natural language through your own interface, while power users still use Tableau/Looker connected to the same underlying data
+This makes you valuable to both personas — the analyst who lives in Tableau and the business user who just wants to ask a question — without forcing either to change their workflow.
+Competitive Context
+This positioning overlaps with:
+Cube (semantic layer with Postgres wire protocol) — but Cube doesn't do source federation or materialization
+dbt Semantic Layer — but dbt requires a separate warehouse (Snowflake/BigQuery) and doesn't federate
+Snowflake/BigQuery themselves — but they require ETL-ing all your data into them first
+Your differentiator would be: zero-ETL federation + automatic materialization + BI compatibility in one product. No one does all three today.
+The Practical First Step
+If you want to test this, the highest-leverage thing to build is a Postgres wire protocol adapter in front of your warehouse query engine. There are Rust crates for this (pgwire). Once BI tools can connect to you as if you're Postgres, the rest of the value (federation, materialization, cost controls) is already built.
+
+
+
+
+
+
+1. LLM Gateway + Monitoring — "AI Ops"
+What: Unified observability for LLM-powered applications — cost tracking, latency monitoring, fallback/cache visibility, and alerting out of the box.
+Why: Teams shipping LLM features have no good way to know when costs spike, providers degrade, or quality drops. Existing observability tools (Datadog, Grafana) are bolt-on, not native to LLM workflows.
+How: The gateway already writes every request to ClickHouse. Wire that data into monitoring dashboards and expand alert types to cover fallback rates, cache hit ratios, per-provider health, and cost anomalies.
+2. Data Warehouse + LLM Gateway — "Talk to Your Data"
+What: Natural language querying across all connected data sources — users ask a question in English, the LLM generates SQL, the warehouse executes it across federated sources.
+Why: Non-technical users can't write SQL, and no existing text-to-SQL product works across multiple heterogeneous sources (Postgres + Stripe + CSV in one query). Your schema discovery and column statistics give the LLM far better context than competitors have.
+How: Build a text-to-SQL pipeline using the gateway's prompt templates to inject schema/stats context, execute generated SQL through the warehouse's federated engine, and use prompt rollouts to A/B test generation quality over time.
+3. Data Warehouse + Monitoring — "Data Infrastructure"
+What: Automated data reliability — know when syncs break, tables go stale, source databases slow down, or query budgets are exceeded.
+Why: Data teams using your warehouse for syncs and materialization need confidence that their pipelines are healthy without building their own monitoring on top.
+How: Feed warehouse metadata (table freshness, sync job status, budget usage) into the monitoring alert system, and reuse existing database monitoring (pg_stat_statements) against the same sources the warehouse connects to.
+4. All Three — "AI-Native Data Platform"
+What: A self-service analytics platform where anyone can ask questions in natural language, get answers from any data source, and engineering gets full visibility into the health and cost of the entire stack.
+Why: No one offers this as an integrated product. Every competitor does one piece — data warehousing, LLM gateway, or observability — but not the closed loop.
+How: Chain them: LLM Gateway translates questions to SQL, Warehouse executes across sources, Monitoring watches everything (LLM costs, query performance, sync health, data freshness). The shared ClickHouse layer makes the platform's own data (LLM logs, monitoring metrics) queryable too.
+
+
+
+
+https://github.com/spiceai/spiceai
+
+Files - CSV	Planned	✅ Implemented (connectors/files/csv.rs)
+Files - JSON/NDJSON	Planned	✅ Implemented (connectors/files/json.rs)
+Files - Excel	Planned	✅ Implemented (connectors/files/excel.rs)
+Files - XML	Planned	⚠️ Types defined, no connector
+Spreadsheets - Google Sheets	Planned	⚠️ Type defined, capabilities defined
+
+Databases - MySQL	Planned	✅ Implemented (connectors/databases/mysql.rs)
+
+Databases - MongoDB	Planned	⚠️ Type defined, capabilities defined
+Databases - SQL Server	Planned	⚠️ Type defined, capabilities defined
+Databases - SQLite	Planned	⚠️ Type defined, capabilities defined
+Cloud Warehouses - BigQuery	Planned	⚠️ Type defined, capabilities defined
+Cloud Warehouses - Redshift	Planned	⚠️ Type defined, capabilities defined
+Cloud Warehouses - Snowflake	Planned	⚠️ Type defined, capabilities defined
+/////////
+CRM - Salesforce	Planned	⚠️ Type defined, capabilities defined
+CRM - HubSpot	Planned	⚠️ Type defined, capabilities defined
+E-commerce - Shopify	Planned	⚠️ Type defined, capabilities defined
+E-commerce - WooCommerce	Planned	⚠️ Type defined, capabilities defined
+Marketing - Google Analytics	Planned	⚠️ Type defined, capabilities defined
+Marketing - Facebook Ads	Planned	⚠️ Type defined, capabilities defined
+Marketing - Google Ads	Planned	⚠️ Type defined, capabilities defined
+Support - Zendesk	Planned	⚠️ Type defined, capabilities defined
+Support - Intercom	Planned	⚠️ Type defined, capabilities defined
+Accounting - QuickBooks	Planned	⚠️ Type defined, capabilities defined
+Accounting - Xero	Planned	⚠️ Type defined, capabilities defined
+Analytics - Mixpanel	Planned	⚠️ Type defined, capabilities defined
+Analytics - Amplitude	Planned	⚠️ Type defined, capabilities defined
+Analytics - PostHog	Planned	⚠️ Type defined, capabilities defined
+Dev Tools - GitHub	Planned	⚠️ Type defined, capabilities defined
+Dev Tools - Jira	Planned	⚠️ Type defined, capabilities defined
+Dev Tools - Linear	Planned	⚠️ Type defined, capabilities defined
+Productivity - Notion	Planned	⚠️ Type defined, capabilities defined
+Productivity - Confluence	Planned	⚠️ Type defined, capabilities defined
+Productivity - Airtable	Planned	⚠️ Type defined, capabilities defined
+Productivity - Asana	Planned	⚠️ Type defined, capabilities defined
+Productivity - Monday	Planned	⚠️ Type defined, capabilities defined
+Cloud Storage - GCS	Planned	⚠️ Type defined
+Cloud Storage - Azure Blob	Planned	⚠️ Type defined
+Streaming - Kafka	Planned	✅ Base implemented (connectors/streaming.rs)
+Streaming - Kinesis	Planned	✅ Base implemented (connectors/streaming.rs)
+Blockchain - Ethereum/Solana/Bitcoin/Polygon	Planned	✅ Base implemented (connectors/blockchain.rs)
+Files - XML	Planned	⚠️ Types defined, no connector
+Spreadsheets - Google Sheets	Planned	⚠️ Type defined, capabilities defined
+Databases - MySQL	Planned	✅ Implemented (connectors/databases/mysql.rs)
+Databases - MongoDB	Planned	⚠️ Type defined, capabilities defined
+Databases - SQL Server	Planned	⚠️ Type defined, capabilities defined
+Databases - SQLite	Planned	⚠️ Type defined, capabilities defined
+Cloud Warehouses - BigQuery	Planned	⚠️ Type defined, capabilities defined
+Cloud Warehouses - Redshift	Planned	⚠️ Type defined, capabilities defined
+Cloud Warehouses - Snowflake	Planned	⚠️ Type defined, capabilities defined
+CRM - Salesforce	Planned	⚠️ Type defined, capabilities defined
+CRM - HubSpot	Planned	⚠️ Type defined, capabilities defined
+E-commerce - Shopify	Planned	⚠️ Type defined, capabilities defined
+E-commerce - WooCommerce	Planned	⚠️ Type defined, capabilities defined
+Marketing - Google Analytics	Planned	⚠️ Type defined, capabilities defined
+Marketing - Facebook Ads	Planned	⚠️ Type defined, capabilities defined
+Marketing - Google Ads	Planned	⚠️ Type defined, capabilities defined
+Support - Zendesk	Planned	⚠️ Type defined, capabilities defined
+Support - Intercom	Planned	⚠️ Type defined, capabilities defined
+Accounting - QuickBooks	Planned	⚠️ Type defined, capabilities defined
+Accounting - Xero	Planned	⚠️ Type defined, capabilities defined
+Analytics - Mixpanel	Planned	⚠️ Type defined, capabilities defined
+Analytics - Amplitude	Planned	⚠️ Type defined, capabilities defined
+Analytics - PostHog	Planned	⚠️ Type defined, capabilities defined
+Dev Tools - GitHub	Planned	⚠️ Type defined, capabilities defined
+Dev Tools - Jira	Planned	⚠️ Type defined, capabilities defined
+Dev Tools - Linear	Planned	⚠️ Type defined, capabilities defined
+Productivity - Notion	Planned	⚠️ Type defined, capabilities defined
+Productivity - Confluence	Planned	⚠️ Type defined, capabilities defined
+Productivity - Airtable	Planned	⚠️ Type defined, capabilities defined
+Productivity - Asana	Planned	⚠️ Type defined, capabilities defined
+Productivity - Monday	Planned	⚠️ Type defined, capabilities defined
+Cloud Storage - GCS	Planned	⚠️ Type defined
+Cloud Storage - Azure Blob	Planned	⚠️ Type defined
+Streaming - Kafka	Planned	✅ Base implemented (connectors/streaming.rs)
+Streaming - Kinesis	Planned	✅ Base implemented (connectors/streaming.rs)
+Blockchain - Ethereum/Solana/Bitcoin/Polygon	Planned	✅ Base implemented (connectors/blockchain.rs)

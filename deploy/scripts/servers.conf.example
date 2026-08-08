@@ -1,0 +1,6 @@
+# Primary server (k3s control-plane node). Format: <ip> [username]
+# The first non-comment line is the primary. Default user is root.
+# YOUR_SERVER_IP root
+#
+# To add worker nodes, use the add-node command instead of listing them here:
+#   ./deploy/scripts/setup-server.sh add-node <worker-ip> [user]

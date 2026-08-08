@@ -1,0 +1,34 @@
+{
+  "name": "io.reiver.unity",
+  "version": "0.1.0",
+  "displayName": "Reiver SDK",
+  "description": "Game observability SDK for Reiver APM. Auto-instrumentation for FPS, frame times, crashes, memory, and network quality with OpenTelemetry v1.39.0 semantic conventions.",
+  "license": "UNLICENSED",
+  "unity": "2021.3",
+  "unityRelease": "0f1",
+  "documentationUrl": "https://docs.reiver.io/unity",
+  "changelogUrl": "https://github.com/reiver/unity-sdk/releases",
+  "licensesUrl": "https://github.com/reiver/unity-sdk/blob/main/LICENSE",
+  "keywords": [
+    "observability",
+    "apm",
+    "telemetry",
+    "opentelemetry",
+    "monitoring",
+    "game",
+    "performance"
+  ],
+  "author": {
+    "name": "Reiver",
+    "email": "sdk@reiver.io",
+    "url": "https://reiver.io"
+  },
+  "dependencies": {},
+  "samples": [
+    {
+      "displayName": "Basic Setup",
+      "description": "Simple example showing basic Reiver integration",
+      "path": "Samples~/BasicSetup"
+    }
+  ]
+}

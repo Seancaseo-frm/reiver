@@ -1,0 +1,8 @@
+# Kustomization for Argo CD config that should sync from Git (no manual apply).
+# When you push changes to these files, Argo CD applies them automatically.
+# Include the argocd namespace so the bootstrap app never prunes it (which would delete Argo CD).
+# Other apps (infra, app-*) use REPLACE_REPO_URL and are applied by setup-server.sh.
+resources:
+  - namespace.yaml
+  - namespace-drone-builds.yaml
+  - project-reiver.yaml

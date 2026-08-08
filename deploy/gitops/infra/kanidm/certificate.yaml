@@ -1,0 +1,15 @@
+# TLS certificate for Kanidm, issued by cert-manager.
+# Using self-signed issuer until DNS for idm.reiver.ai is configured.
+# Once DNS is ready, switch issuerRef to letsencrypt-prod.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kanidm-tls
+  namespace: reiver-infra
+spec:
+  secretName: kanidm-tls
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+  dnsNames:
+    - idm.reiver.ai

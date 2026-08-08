@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redpanda-create-topics
+  namespace: reiver-infra
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-redpanda
+          image: redpandadata/redpanda:v24.1.1
+          command:
+            - sh
+            - -c
+            - |
+              until rpk cluster health -X brokers=redpanda.reiver-infra.svc:9093 -X admin.hosts=redpanda.reiver-infra.svc:9644; do
+                echo "Waiting for Redpanda..."
+                sleep 5
+              done
+      containers:
+        - name: create-topics
+          image: redpandadata/redpanda:v24.1.1
+          command:
+            - sh
+            - -c
+            - |
+              BROKERS="redpanda.reiver-infra.svc:9093"
+              TOPICS="
+                reiver.exceptions
+                reiver.spans
+                reiver.logs.otlp
+                reiver.logs.unstructured
+                reiver.metrics
+                reiver.llm.chunks
+                reiver.warehouse.sync_jobs
+                reiver.pipeline.events
+                reiver.platform.events
+                reiver.session.eval.jobs
+                reiver.a2a.messages
+                reiver.a2a.push
+                reiver.a2a.push.retry
+              "
+              for topic in $TOPICS; do
+                echo "Creating topic: $topic"
+                rpk topic create "$topic" \
+                  -X brokers="$BROKERS" \
+                  --partitions 3 \
+                  --config retention.ms=604800000 \
+                  --config compression.type=snappy \
+                  --config max.message.bytes=4194304 \
+                  || true
+              done
+              echo "All topics created."
+              rpk topic list -X brokers="$BROKERS"

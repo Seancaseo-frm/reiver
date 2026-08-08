@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-pond-workers
+  namespace: reiver
+  labels:
+    app: reiver-pond-workers
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: reiver-pond-workers
+  template:
+    metadata:
+      labels:
+        app: reiver-pond-workers
+    spec:
+      containers:
+        - name: worker
+          image: reiver-pond:latest
+          imagePullPolicy: Always
+          command: ["./reiver-pond"]
+          args: ["--mode", "workers"]
+          envFrom:
+            - secretRef:
+                name: reiver-pond
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-pond-workers,service.version=c04e23aedba7f78a13bdb35e70baf1a7351bd9ea"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "5Gi"

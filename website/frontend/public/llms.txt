@@ -1,0 +1,25 @@
+# Reiver
+
+> Production AI control plane - OpenTelemetry-native observability, LLM gateway, and prompt hub in one.
+
+Reiver sits in the LLM request path. It is not a side-car observer — it routes, controls, and records every LLM call in production.
+
+## Components
+
+- **Flow**: LLM gateway — routes requests across providers (OpenAI, Anthropic, Gemini, Bedrock), enforces rate limits, manages failover, tracks cost per token.
+- **Watch**: APM and tracing — OpenTelemetry-native, receives traces and spans, built-in data warehouse (no separate storage bill).
+- **Hub**: Prompt management — version, test, and roll out prompt changes safely across environments.
+- **Herd**: Agent registry — catalog and manage AI agents in production.
+- **Moodeng**: Agent-assisted operations — user-triggered investigation and operations through MCP. Not autonomous; the user's coding agent drives every action.
+
+## Links
+
+- Site: https://reiver.ai
+- Docs: https://docs.reiver.ai
+- Comparison — Reiver vs Datadog: https://reiver.ai/compare/datadog
+- Security: https://reiver.ai/security
+- Model Catalog: https://reiver.ai/model-catalog
+
+## Details
+
+See [llms-full.txt](https://reiver.ai/llms-full.txt) for the complete product description.

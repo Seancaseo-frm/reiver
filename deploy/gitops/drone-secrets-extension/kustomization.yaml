@@ -1,0 +1,11 @@
+# Drone Kubernetes secrets extension. Deploy after creating secrets
+# drone-secret-plugin and drone-repo-secrets (see deploy/docs/DRONE.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: drone
+resources:
+  - service-account.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - deployment.yaml
+  - service.yaml

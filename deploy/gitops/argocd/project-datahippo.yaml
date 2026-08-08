@@ -1,0 +1,44 @@
+# Argo CD project "reiver" — required for Applications that use project: reiver.
+# Apply this before or with the Application manifests (e.g. in setup-server.sh).
+# Allow both in-cluster (kubernetes.default.svc) and external server URL so sync works either way.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: reiver
+  namespace: argocd
+spec:
+  description: Reiver infra and app
+  sourceRepos:
+    - '*'
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: reiver
+    - server: https://kubernetes.default.svc
+      namespace: reiver-infra
+    - server: https://kubernetes.default.svc
+      namespace: cert-manager
+    - server: https://kubernetes.default.svc
+      namespace: clickhouse-operator-system
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+    - server: https://kubernetes.default.svc
+      namespace: drone
+    - server: https://kubernetes.default.svc
+      namespace: drone-builds
+    - server: https://YOUR_SERVER_IP:6443
+      namespace: reiver
+    - server: https://YOUR_SERVER_IP:6443
+      namespace: reiver-infra
+    - server: https://YOUR_SERVER_IP:6443
+      namespace: cert-manager
+    - server: https://YOUR_SERVER_IP:6443
+      namespace: clickhouse-operator-system
+    - server: https://YOUR_SERVER_IP:6443
+      namespace: kube-system
+    - server: https://YOUR_SERVER_IP:6443
+      namespace: drone
+    - server: https://YOUR_SERVER_IP:6443
+      namespace: drone-builds
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'

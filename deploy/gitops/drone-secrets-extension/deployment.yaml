@@ -1,0 +1,47 @@
+# Drone Kubernetes secrets extension. Runner resolves from_secret by calling this service;
+# it reads Kubernetes Secrets in the drone namespace (e.g. drone-repo-secrets).
+# Requires secret "drone-secret-plugin" with key DRONE_SECRET_PLUGIN_TOKEN (same value
+# used by the runner). Create before sync: see deploy/docs/DRONE.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drone-kubernetes-secrets
+  namespace: drone
+  labels:
+    app.kubernetes.io/name: drone-kubernetes-secrets
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: drone-kubernetes-secrets
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: drone-kubernetes-secrets
+    spec:
+      serviceAccountName: drone-kubernetes-secrets
+      nodeSelector:
+        reiver.io/role: ci
+      containers:
+        - name: secrets
+          image: drone/kubernetes-secrets:latest
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: drone-secret-plugin
+                  key: DRONE_SECRET_PLUGIN_TOKEN
+            # Extension defaults to namespace "default"; we need it to read drone-repo-secrets in this namespace
+            - name: KUBERNETES_NAMESPACE
+              value: drone
+            - name: DEBUG
+              value: "true"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi

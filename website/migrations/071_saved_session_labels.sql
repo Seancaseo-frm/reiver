@@ -1,0 +1,1 @@
+ALTER TABLE saved_sessions ADD COLUMN IF NOT EXISTS labels TEXT[] DEFAULT '{}';

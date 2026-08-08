@@ -1,0 +1,522 @@
+---
+# Drone CI: build and push images to ghcr.io. Extension uses get.path as K8s Secret name, get.name as key.
+# See deploy/docs/DRONE.md.
+#
+# NOTE: Use $$ to escape $ in commands that reference secret-backed env vars.
+# Drone's envsubst pre-processes the entire YAML before parsing, expanding
+# ${VAR} using build metadata (repo, commit, etc.) — but secrets aren't in
+# that map, so ${SECRET_VAR} would silently become empty. $$ produces a
+# literal $ that survives envsubst and lets the shell resolve the var at
+# runtime.
+kind: secret
+name: git-push-token
+get:
+  path: git-push-token
+  name: git-push-token
+
+---
+kind: secret
+name: registry-username
+get:
+  path: registry-username
+  name: registry-username
+
+---
+kind: secret
+name: registry-password
+get:
+  path: registry-password
+  name: registry-password
+
+---
+kind: secret
+name: otel-project-id
+get:
+  path: otel-project-id
+  name: otel-project-id
+
+---
+kind: pipeline
+type: kubernetes
+name: deploy
+
+trigger:
+  branch:
+    - main
+    - master
+
+timeout: 180
+
+clone:
+  disable: true
+
+volumes:
+  - name: otel
+    temp: {}
+  - name: cargo-cache
+    host:
+      path: /cache/cargo
+
+steps:
+  # -----------------------------------------------------------------------
+  # OTel: download otel-cli and start the root deploy span.
+  # Uses /otel temp volume so files are available to all steps without
+  # polluting the workspace (which must be empty for git clone).
+  # -----------------------------------------------------------------------
+  - name: otel-init
+    image: alpine
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - apk add --no-cache curl
+      - mkdir -p /otel/bin /otel/sock /otel/sock-images
+      - curl -sSfL -o /tmp/otel-cli.tar.gz
+          "https://github.com/equinix-labs/otel-cli/releases/download/v0.4.5/otel-cli_0.4.5_linux_amd64.tar.gz"
+      - tar -xzf /tmp/otel-cli.tar.gz -C /otel/bin otel-cli
+      - chmod +x /otel/bin/otel-cli
+      - |
+        /otel/bin/otel-cli span background \
+          --service "reiver-cicd" \
+          --name "ci.deploy" \
+          --attrs "vcs.revision=${DRONE_COMMIT_SHA},vcs.branch=${DRONE_BRANCH},cicd.pipeline.name=deploy,cicd.pipeline.run_id=${DRONE_BUILD_NUMBER}" \
+          --tp-export /otel/tp \
+          --sockdir /otel/sock
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # Clone
+  # -----------------------------------------------------------------------
+  - name: clone
+    image: alpine/git
+    depends_on:
+      - otel-init
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - apk add --no-cache git
+      - |
+        if [ -z "$$GIT_PUSH_TOKEN" ]; then
+          echo "GIT_PUSH_TOKEN is empty. Add secret 'git_push_token' in Drone repo Settings → Secrets (GitHub PAT with repo scope)."
+          exit 1
+        fi
+      - |
+        if [ -z "$$REGISTRY_USERNAME" ] || [ -z "$$REGISTRY_PASSWORD" ]; then
+          echo "Registry credentials missing. Add secrets 'registry_username' and 'registry_password' in Drone repo Settings → Secrets."
+          exit 1
+        fi
+      - export TRACEPARENT=$(cat /otel/tp 2>/dev/null || true)
+      - |
+        /otel/bin/otel-cli exec --service reiver-cicd --name "ci.clone" \
+          --attrs "vcs.revision=${DRONE_COMMIT_SHA},vcs.branch=${DRONE_BRANCH}" -- sh -c '
+          git ls-remote "https://x-access-token:'"$$GIT_PUSH_TOKEN"'@github.com/your-org/reiver.git" HEAD
+          git clone --depth 1 --branch "'"${DRONE_BRANCH}"'" "https://x-access-token:'"$$GIT_PUSH_TOKEN"'@github.com/your-org/reiver.git" .
+          git checkout -q "'"$DRONE_COMMIT_SHA"'"
+        '
+    environment:
+      GIT_PUSH_TOKEN:
+        from_secret: git-push-token
+      REGISTRY_USERNAME:
+        from_secret: registry-username
+      REGISTRY_PASSWORD:
+        from_secret: registry-password
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # Build: frontend + migrations
+  # -----------------------------------------------------------------------
+  - name: build
+    depends_on:
+      - clone
+    image: node:22-bookworm
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - export TRACEPARENT=$(cat /otel/tp 2>/dev/null || true)
+      # Frontend: Vite production build reads website/frontend/.env.production (e.g. VITE_DOCS_BASE_URL).
+      # Override per pipeline by setting VITE_* in this step's environment (shell vars beat .env files).
+      - /otel/bin/otel-cli exec --service reiver-cicd --name "ci.compile.frontend"
+          --attrs "cicd.build.target=frontend" --
+          sh -c 'cd website/frontend && npm ci && npm run build'
+      - mkdir -p output
+      - cp -r website/migrations output/migrations
+      - cp -r website/frontend/dist output/frontend-dist
+      - ls -lh output/
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # Build: docs site
+  # -----------------------------------------------------------------------
+  - name: build-docs
+    depends_on:
+      - clone
+    image: node:22-alpine
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - export TRACEPARENT=$(cat /otel/tp 2>/dev/null || true)
+      - /otel/bin/otel-cli exec --service reiver-cicd --name "ci.compile.docs"
+          --attrs "cicd.build.target=docs" --
+          sh -c 'cd docs && npm ci && npm run build'
+      - mkdir -p output/docs-dist
+      - cp -r docs/.vitepress/dist/* output/docs-dist/
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # Rust tests — gates all compilation and image push
+  # -----------------------------------------------------------------------
+  - name: test
+    depends_on: [clone]
+    image: rust:trixie
+    volumes:
+      - name: cargo-cache
+        path: /cache
+      - name: otel
+        path: /otel
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends
+          pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          libclang-dev clang cmake libssl-dev libsasl2-dev
+          protobuf-compiler libprotobuf-dev zlib1g-dev
+      - export CARGO_HOME=/cache/registry
+      - export CARGO_TARGET_DIR=/cache/target-test
+      - export TRACEPARENT=$(cat /otel/tp 2>/dev/null || true)
+      - cargo test --workspace
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # Rust compilation (host-volume cached target dirs)
+  # -----------------------------------------------------------------------
+  - name: compile-flow
+    depends_on: [test]
+    image: rust:trixie
+    volumes:
+      - name: cargo-cache
+        path: /cache
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends
+          pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          libclang-dev clang cmake libssl-dev libsasl2-dev
+          protobuf-compiler libprotobuf-dev zlib1g-dev
+      - export CARGO_HOME=/cache/registry
+      - export CARGO_TARGET_DIR=/cache/target-flow
+      - RUSTFLAGS="--cfg aws_sdk_unstable" cargo build --release -p reiver-flow
+      - mkdir -p output && cp $CARGO_TARGET_DIR/release/reiver-flow output/
+
+  - name: compile-watch
+    depends_on: [test]
+    image: rust:trixie
+    volumes:
+      - name: cargo-cache
+        path: /cache
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends
+          pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          libclang-dev clang cmake libssl-dev libsasl2-dev
+          protobuf-compiler libprotobuf-dev zlib1g-dev
+      - export CARGO_HOME=/cache/registry
+      - export CARGO_TARGET_DIR=/cache/target-watch
+      - cargo build --release -p reiver-watch
+      - mkdir -p output && cp $CARGO_TARGET_DIR/release/reiver-watch output/
+
+  - name: compile-website
+    depends_on: [test]
+    image: rust:trixie
+    volumes:
+      - name: cargo-cache
+        path: /cache
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends
+          pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          libclang-dev clang cmake libssl-dev libsasl2-dev
+          protobuf-compiler libprotobuf-dev zlib1g-dev
+      - export CARGO_HOME=/cache/registry
+      - export CARGO_TARGET_DIR=/cache/target-website
+      - cargo build --release -p reiver-website
+      - mkdir -p output && cp $CARGO_TARGET_DIR/release/reiver-website output/
+
+  - name: compile-mcp
+    depends_on: [test]
+    image: rust:trixie
+    volumes:
+      - name: cargo-cache
+        path: /cache
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends
+          pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          libclang-dev clang cmake libssl-dev libsasl2-dev
+          protobuf-compiler libprotobuf-dev zlib1g-dev
+      - export CARGO_HOME=/cache/registry
+      - export CARGO_TARGET_DIR=/cache/target-mcp
+      - cargo build --release -p reiver-mcp
+      - mkdir -p output && cp $CARGO_TARGET_DIR/release/reiver-mcp output/
+
+  - name: compile-herd
+    depends_on: [test]
+    image: rust:trixie
+    volumes:
+      - name: cargo-cache
+        path: /cache
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends
+          pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          libclang-dev clang cmake libssl-dev libsasl2-dev
+          protobuf-compiler libprotobuf-dev zlib1g-dev
+      - export CARGO_HOME=/cache/registry
+      - export CARGO_TARGET_DIR=/cache/target-herd
+      - cargo build --release -p reiver-herd
+      - mkdir -p output && cp $CARGO_TARGET_DIR/release/reiver-herd output/
+
+  # -----------------------------------------------------------------------
+  # OTel: start timer for image builds (Kaniko steps can't be instrumented)
+  # -----------------------------------------------------------------------
+  - name: otel-images-start
+    image: alpine
+    depends_on:
+      - build
+      - build-docs
+      - compile-flow
+      - compile-watch
+      - compile-website
+      - compile-mcp
+      - compile-herd
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - export TRACEPARENT=$(cat /otel/tp 2>/dev/null || true)
+      - /otel/bin/otel-cli span background --service reiver-cicd --name "ci.images"
+          --attrs "cicd.build.stage=image-push"
+          --tp-export /otel/tp-images --sockdir /otel/sock-images
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # Image builds (Kaniko — copies pre-built binaries, no Rust compilation)
+  # -----------------------------------------------------------------------
+  - name: build-docs-image
+    depends_on:
+      - otel-images-start
+    image: plugins/kaniko
+    settings:
+      registry: ghcr.io
+      repo: ghcr.io/your-org/reiver-docs
+      username:
+        from_secret: registry-username
+      password:
+        from_secret: registry-password
+      dockerfile: deploy/docker/Dockerfile.docs
+      context: .
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+
+  - name: build-website
+    depends_on:
+      - otel-images-start
+    image: plugins/kaniko
+    settings:
+      registry: ghcr.io
+      repo: ghcr.io/your-org/reiver-website
+      username:
+        from_secret: registry-username
+      password:
+        from_secret: registry-password
+      dockerfile: deploy/docker/Dockerfile.website
+      context: .
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+
+  - name: build-watch
+    depends_on:
+      - otel-images-start
+    image: plugins/kaniko
+    settings:
+      registry: ghcr.io
+      repo: ghcr.io/your-org/reiver-watch
+      username:
+        from_secret: registry-username
+      password:
+        from_secret: registry-password
+      dockerfile: deploy/docker/Dockerfile.watch
+      context: .
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+
+  - name: build-flow
+    depends_on:
+      - otel-images-start
+    image: plugins/kaniko
+    settings:
+      registry: ghcr.io
+      repo: ghcr.io/your-org/reiver-flow
+      username:
+        from_secret: registry-username
+      password:
+        from_secret: registry-password
+      dockerfile: deploy/docker/Dockerfile.flow
+      context: .
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+
+  # Pond disabled — re-enable when Pond launches
+  # - name: build-pond
+  #   depends_on:
+  #     - otel-images-start
+  #   image: plugins/kaniko
+  #   settings:
+  #     registry: ghcr.io
+  #     repo: ghcr.io/your-org/reiver-pond
+  #     username:
+  #       from_secret: registry-username
+  #     password:
+  #       from_secret: registry-password
+  #     dockerfile: deploy/docker/Dockerfile.pond
+  #     context: .
+  #     tags:
+  #       - latest
+  #       - ${DRONE_COMMIT_SHA}
+
+  - name: build-mcp
+    depends_on:
+      - otel-images-start
+    image: plugins/kaniko
+    settings:
+      registry: ghcr.io
+      repo: ghcr.io/your-org/reiver-mcp
+      username:
+        from_secret: registry-username
+      password:
+        from_secret: registry-password
+      dockerfile: deploy/docker/Dockerfile.mcp
+      context: .
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+
+  - name: build-herd
+    depends_on:
+      - otel-images-start
+    image: plugins/kaniko
+    settings:
+      registry: ghcr.io
+      repo: ghcr.io/your-org/reiver-herd
+      username:
+        from_secret: registry-username
+      password:
+        from_secret: registry-password
+      dockerfile: deploy/docker/Dockerfile.herd
+      context: .
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+
+  # -----------------------------------------------------------------------
+  # OTel: close the image-build span
+  # -----------------------------------------------------------------------
+  - name: otel-images-done
+    image: alpine
+    depends_on:
+      - build-website
+      - build-watch
+      - build-flow
+      # - build-pond  # Pond disabled
+      - build-mcp
+      - build-herd
+      - build-docs-image
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - /otel/bin/otel-cli span end --sockdir /otel/sock-images
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # Update Kustomize overlay and push
+  # -----------------------------------------------------------------------
+  - name: update-overlay
+    image: alpine/git
+    depends_on:
+      - otel-images-done
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - apk add --no-cache git sed
+      - git config --global user.name "drone-ci[bot]"
+      - git config --global user.email "drone-ci[bot]@users.noreply.github.com"
+      - export TRACEPARENT=$(cat /otel/tp 2>/dev/null || true)
+      - |
+        /otel/bin/otel-cli exec --service reiver-cicd --name "ci.deploy.overlay-update" \
+          --attrs "deployment.environment=production,deployment.services=website+watch+flow+mcp+herd+docs,vcs.revision=${DRONE_COMMIT_SHA}" -- sh -c '
+          OVERLAY=deploy/k8s/overlays/production
+          sed -i "s|REPLACE_REGISTRY_PREFIX|ghcr.io/your-org/reiver|g" "$OVERLAY/kustomization.yaml" || true
+          sed -i "s|newTag: .*|newTag: '"${DRONE_COMMIT_SHA}"'|g" "$OVERLAY/kustomization.yaml"
+          sed -i "s|REPLACE_SERVICE_VERSION|'"${DRONE_COMMIT_SHA}"'|g" deploy/k8s/base/*-deployment.yaml
+          git add deploy/k8s/
+          if ! git diff --staged --quiet; then
+            if [ -z "'"$$GIT_PUSH_TOKEN"'" ]; then
+              echo "GIT_PUSH_TOKEN is not set."
+              exit 1
+            fi
+            git commit -m "chore(deploy): update image tags to '"${DRONE_COMMIT_SHA}"' [skip ci]"
+            git push "https://x-access-token:'"$$GIT_PUSH_TOKEN"'@github.com/your-org/reiver.git" HEAD:'"${DRONE_BRANCH}"'
+          fi
+        '
+    environment:
+      GIT_PUSH_TOKEN:
+        from_secret: git-push-token
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id
+
+  # -----------------------------------------------------------------------
+  # OTel: close the root deploy span
+  # -----------------------------------------------------------------------
+  - name: otel-end
+    image: alpine
+    depends_on:
+      - update-overlay
+    volumes:
+      - name: otel
+        path: /otel
+    commands:
+      - /otel/bin/otel-cli span end --sockdir /otel/sock
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://reiver-watch.reiver.svc:3000/api/v1/traces"
+      OTEL_EXPORTER_OTLP_HEADERS: "X-Project-Id=$$OTEL_PROJECT_ID"
+      OTEL_PROJECT_ID:
+        from_secret: otel-project-id

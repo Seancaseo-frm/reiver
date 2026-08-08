@@ -1,0 +1,76 @@
+[package]
+name = "reiver-sdk"
+version = "0.1.0"
+edition = "2021"
+authors = ["Reiver"]
+description = "Reiver observability SDK for Rust"
+license = "BUSL-1.1"
+repository = "https://github.com/reiver/reiver-rust"
+keywords = ["error", "monitoring", "logging", "observability", "apm", "llm"]
+categories = ["development-tools", "debugging"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "2"
+
+# Backtrace support (like Sentry uses)
+backtrace = "0.3"
+
+# Logging
+tracing = "0.1"
+
+# OpenTelemetry support (for trace correlation) - match server version
+opentelemetry = { version = "0.31", optional = true }
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Channel for async sending
+futures = "0.3"
+
+# Hostname detection
+hostname = "0.4"
+
+# --- Rayon instrumentation (behind "rayon" feature) ---
+rayon = { version = "1.11", optional = true }
+
+# --- Memory / allocator instrumentation ---
+libc = { version = "0.2", optional = true }
+tikv-jemalloc-ctl = { version = "0.6", features = ["stats"], optional = true }
+libmimalloc-sys = { version = "0.1", optional = true }
+
+# --- Profiling dependencies (behind "profiling" feature) ---
+anyhow = { version = "1.0", optional = true }
+pprof = { version = "0.15", features = ["protobuf-codec", "flamegraph"], optional = true }
+opentelemetry-proto = { version = "0.31.0", features = ["gen-tonic-messages", "with-serde", "profiles"], optional = true }
+prost = { version = "0.14", optional = true }
+flate2 = { version = "1", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+jemalloc_pprof = { version = "0.8", optional = true }
+
+[features]
+default = []
+opentelemetry = ["dep:opentelemetry"]
+rayon = ["dep:rayon", "dep:opentelemetry"]
+memory = ["dep:opentelemetry", "dep:libc"]
+jemalloc = ["memory", "dep:tikv-jemalloc-ctl"]
+mimalloc = ["memory", "dep:libmimalloc-sys"]
+profiling = ["dep:anyhow", "dep:pprof", "dep:opentelemetry-proto", "dep:prost", "dep:flate2"]
+profiling-heap = ["profiling", "dep:jemalloc_pprof"]
+
+[dev-dependencies]
+tokio-test = "0.4"

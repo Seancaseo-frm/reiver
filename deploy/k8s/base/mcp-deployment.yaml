@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-mcp
+  namespace: reiver
+  labels:
+    app: reiver-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reiver-mcp
+  template:
+    metadata:
+      labels:
+        app: reiver-mcp
+    spec:
+      containers:
+        - name: mcp
+          image: reiver-mcp:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3002
+              name: http
+          env:
+            - name: WEBSITE_URL
+              value: "http://reiver-website:3003"
+            - name: FLOW_URL
+              value: "http://reiver-flow:3001"
+            - name: WATCH_URL
+              value: "http://reiver-watch:3000"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://reiver-watch:3000"
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-mcp,service.version=c04e23aedba7f78a13bdb35e70baf1a7351bd9ea"
+          envFrom:
+            - secretRef:
+                name: reiver-mcp
+                optional: true
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-mcp
+  namespace: reiver
+  labels:
+    app: reiver-mcp
+spec:
+  selector:
+    app: reiver-mcp
+  ports:
+    - port: 3002
+      targetPort: http
+      name: http
+  type: ClusterIP

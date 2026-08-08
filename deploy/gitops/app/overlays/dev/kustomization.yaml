@@ -1,0 +1,7 @@
+# GitOps app (dev): delegates to existing Kustomize overlay.
+# Argo CD syncs this path; CI updates image tags in ../../../k8s/overlays/dev.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../../k8s/overlays/dev

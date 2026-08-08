@@ -1,0 +1,13 @@
+target/
+udf/target/
+.git/
+.gitignore
+.env
+*.log
+.DS_Store
+frontend/
+**/node_modules/
+README.md
+LICENSE
+Makefile
+

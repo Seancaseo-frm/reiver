@@ -1,0 +1,168 @@
+# Run tests on push and pull requests
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Detect which projects changed to avoid building everything
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      website: ${{ steps.filter.outputs.website }}
+      watch: ${{ steps.filter.outputs.watch }}
+      flow: ${{ steps.filter.outputs.flow }}
+      pond: ${{ steps.filter.outputs.pond }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'core/**'
+            website:
+              - 'website/**'
+              - 'core/**'
+            watch:
+              - 'watch/**'
+              - 'core/**'
+            flow:
+              - 'flow/**'
+              - 'core/**'
+            pond:
+              - 'pond/**'
+              - 'core/**'
+
+  test-core:
+    name: Test Core
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Install xmlsec dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
+      - name: Check
+        run: cargo check --all-features
+        working-directory: core
+
+      - name: Test
+        run: cargo test --all-features
+        working-directory: core
+
+  test-website:
+    name: Test Website
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: website
+
+      - name: Install xmlsec dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
+      - name: Check
+        run: cargo check --all-features
+        working-directory: website
+
+      - name: Test
+        run: cargo test --all-features
+        working-directory: website
+
+  test-watch:
+    name: Test Watch
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.watch == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: watch
+
+      - name: Install xmlsec dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
+      - name: Check
+        run: cargo check --all-features
+        working-directory: watch
+
+      - name: Test
+        run: cargo test --all-features
+        working-directory: watch
+
+  test-flow:
+    name: Test Flow
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.flow == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: flow
+
+      - name: Install xmlsec dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
+      - name: Check
+        run: cargo check --all-features
+        working-directory: flow
+
+      - name: Test
+        run: cargo test --all-features
+        working-directory: flow
+
+  test-pond:
+    name: Test Pond
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.pond == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pond
+
+      - name: Install xmlsec dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
+      - name: Check
+        run: cargo check --all-features
+        working-directory: pond
+
+      - name: Test
+        run: cargo test --all-features
+        working-directory: pond

@@ -1,0 +1,28 @@
+{
+  "name": "openclaw-flow",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin for the Flow LLM gateway — cost controls, guardrails, prompt management, and observability for autonomous agents.",
+  "main": "index.ts",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "llm-gateway",
+    "flow",
+    "reiver",
+    "ai-agent",
+    "cost-controls",
+    "guardrails"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/reiver",
+    "directory": "integrations/openclaw-plugin"
+  },
+  "files": [
+    "index.ts",
+    "openclaw.plugin.json",
+    "README.md"
+  ]
+}

@@ -1,0 +1,21 @@
+# NodePort Service so Woodpecker UI is reachable at http://<server-ip>:31473.
+# Selector must match the server subchart's selectorLabels: app.kubernetes.io/name is the
+# subchart name "server", not "woodpecker-server". See woodpecker-ci/helm charts/woodpecker/charts/server.
+apiVersion: v1
+kind: Service
+metadata:
+  name: woodpecker-server-nodeport
+  namespace: woodpecker
+  labels:
+    app.kubernetes.io/name: woodpecker-nodeport
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      nodePort: 31473
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: server
+    app.kubernetes.io/instance: woodpecker

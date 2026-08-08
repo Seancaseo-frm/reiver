@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: reiver
+    ports:
+      - "5435:5432"
+    volumes:
+      - pond_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    ports:
+      - "8125:8123"
+      - "9002:9000"
+    volumes:
+      - pond_clickhouse_data:/var/lib/clickhouse
+      - ./docker/clickhouse/config.xml:/etc/clickhouse-server/config.d/reiver.xml:ro
+    environment:
+      CLICKHOUSE_DB: reiver
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+    volumes:
+      - pond_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.1
+    ports:
+      - "9094:9092"
+    volumes:
+      - pond_redpanda_data:/var/lib/redpanda/data
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --mode
+      - dev-container
+      - --default-log-level=info
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pond:
+    build:
+      context: ..
+      dockerfile: pond/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/reiver
+      REDIS_URL: redis://redis:6379
+      CLICKHOUSE_URL: http://default:@clickhouse:8123
+      KAFKA_HOSTS: redpanda:9092
+      CLICKHOUSE_KAFKA_HOSTS: redpanda:9092
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    ports:
+      - "3002:3002"
+      - "5433:5433"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pond_postgres_data:
+  pond_clickhouse_data:
+  pond_redis_data:
+  pond_redpanda_data:

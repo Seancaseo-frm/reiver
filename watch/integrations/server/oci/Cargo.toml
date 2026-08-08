@@ -1,0 +1,33 @@
+[package]
+name = "reiver-integrations-server-oci"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+
+[dependencies]
+# HTTP client for OCI REST API
+reqwest = { version = "0.11", features = ["json"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+
+# Error handling
+anyhow = "1.0"
+uuid = { version = "1.6", features = ["v4"] }
+
+# For OCI request signing
+sha2 = "0.10"
+rsa = "0.9"
+base64 = "0.21"
+hex = "0.4"
+url = "2.5"

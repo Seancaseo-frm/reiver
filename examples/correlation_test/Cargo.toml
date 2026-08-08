@@ -1,0 +1,43 @@
+[package]
+name = "correlation_test"
+version = "0.1.0"
+edition = "2021"
+description = "Integration test for trace-log-error correlation in Reiver"
+license = "BUSL-1.1"
+
+[dependencies]
+# Reiver SDK with OpenTelemetry support for trace correlation
+reiver-sdk = { path = "../../sdk/rust", features = ["opentelemetry"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full", "rt-multi-thread", "macros"] }
+
+# HTTP client - must match opentelemetry-otlp's reqwest version
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# OpenTelemetry - match server version (0.31)
+opentelemetry = { version = "0.31", features = ["trace", "logs"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio", "logs"] }
+opentelemetry-otlp = { version = "0.31", features = ["http-proto", "reqwest-client", "logs", "http-json"] }
+opentelemetry-appender-tracing = "0.31"
+
+# Tracing (for logs)
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# UUID for generating IDs
+uuid = { version = "1.0", features = ["v4"] }
+
+# Random for generating test data
+rand = "0.8"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"

@@ -1,0 +1,9 @@
+# Debug proxy: logs secret requests/responses and forwards to drone-kubernetes-secrets.
+# Runner uses this so builds still work; view logs with: kubectl logs -n drone deployment/drone-secret-debug-proxy -f
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: drone
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml

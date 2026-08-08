@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: reiver-flow
+  namespace: reiver
+spec:
+  podSelector:
+    matchLabels:
+      app: reiver-flow
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: reiver-flow
+        - podSelector:
+            matchLabels:
+              app: reiver-website
+        - podSelector:
+            matchLabels:
+              app: reiver-watch
+        - podSelector:
+            matchLabels:
+              app: reiver-mcp
+        - podSelector:
+            matchLabels:
+              app: reiver-herd
+      ports:
+        - protocol: TCP
+          port: 3001

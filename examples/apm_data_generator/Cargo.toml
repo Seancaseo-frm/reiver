@@ -1,0 +1,39 @@
+[package]
+name = "apm_data_generator"
+version = "0.1.0"
+edition = "2021"
+description = "APM data generator for testing Reiver UI"
+license = "BUSL-1.1"
+
+[[bin]]
+name = "apm_data_generator"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full", "rt-multi-thread", "macros"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID for generating IDs
+uuid = { version = "1.0", features = ["v4"] }
+
+# Random for generating test data
+rand = "0.8"
+
+# CLI parsing
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Error handling
+anyhow = "1.0"
+
+# Colors for CLI output
+colored = "2.0"

@@ -1,0 +1,34 @@
+# Argo CD Application: infra (operators + Postgres, ClickHouse, Redis, Redpanda).
+# Replace REPLACE_REPO_URL with your repo URL (e.g. https://github.com/your-org/reiver.git) before applying.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reiver-infra
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: reiver
+  source:
+    repoURL: REPLACE_REPO_URL
+    path: deploy/gitops/infra
+    targetRevision: HEAD
+    # Kustomize helmCharts need --enable-helm via argocd-cm (setup-server.sh or patch-argocd-kustomize-helm.sh).
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: reiver-infra
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - ServerSideDiff=true

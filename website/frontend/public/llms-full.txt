@@ -1,0 +1,69 @@
+# Reiver — Production AI Control Plane
+
+> OpenTelemetry-native observability, LLM gateway, and prompt hub in one platform.
+
+## What Reiver Is
+
+Reiver is a production AI control plane. It sits in the LLM request path — routing, controlling, and recording every LLM call. This is different from side-car observability tools (like Datadog or Langfuse) that watch from outside the request path.
+
+Your coding agent can set up Reiver for you: point it at the docs, give it a scoped Reiver token, and it instruments your app and runs everything through MCP. No platform team required.
+
+## Components
+
+### Flow (LLM Gateway)
+- Routes LLM requests across providers: OpenAI, Anthropic, Gemini, Bedrock
+- Single base URL for all providers
+- Rate limiting, failover, and load balancing
+- Per-token cost tracking at the request path level
+- Prompt template injection at the gateway layer
+
+### Watch (APM & Tracing)
+- OpenTelemetry-native — receives standard OTLP traces and spans
+- Built-in data warehouse — no separate ingest + index/search billing
+- Service maps, latency tracking, error rates
+- LLM-specific span attributes (model, tokens, cost, prompt/completion)
+- Dashboards and alerting
+
+### Hub (Prompt Management)
+- Version control for prompts
+- A/B testing and gradual rollout
+- Environment-scoped deployment (dev/staging/prod)
+- Prompt performance tracking tied to traces
+
+### Herd (Agent Registry)
+- Catalog AI agents running in production
+- Agent-to-agent protocol support (A2A)
+- Lifecycle management
+
+### Moodeng (Agent-Assisted Operations)
+- User-triggered investigation and operations through MCP
+- The user's coding agent drives every action — Moodeng is not autonomous
+- Connects to Watch, Flow, Hub, and Herd for cross-component queries
+
+## Architecture
+
+Reiver is in-path: LLM calls flow through Flow (gateway) before reaching the provider. Traces flow from your app to Watch over OpenTelemetry. Hub manages prompts that Flow injects. This means Reiver can control (not just observe) what happens in production.
+
+## Technology
+
+- Backend: Rust (Axum)
+- Data warehouse: ClickHouse
+- Tracing protocol: OpenTelemetry (OTLP)
+- Agent protocol: MCP (Model Context Protocol) + A2A
+- SDKs: Python, Rust, Unity, Unreal
+
+## Links
+
+- Site: https://reiver.ai
+- Docs: https://docs.reiver.ai
+- Docs — Flow: https://docs.reiver.ai/flow/
+- Docs — Watch: https://docs.reiver.ai/watch/
+- Docs — SDKs: https://docs.reiver.ai/sdks/
+- Docs — Agents: https://docs.reiver.ai/agents/
+- Comparison — Reiver vs Datadog: https://reiver.ai/compare/datadog
+- Security & Data Handling: https://reiver.ai/security
+- Model Catalog: https://reiver.ai/model-catalog
+
+## Status
+
+Private Early Access. No SLA. Early Access terms apply.

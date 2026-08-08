@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: reiver-website
+  namespace: reiver
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: reiver-website

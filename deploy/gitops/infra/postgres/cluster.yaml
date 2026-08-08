@@ -1,0 +1,29 @@
+# CloudNativePG Cluster: single instance, database "reiver".
+# Read-write service: postgres-cluster-rw.reiver-infra.svc:5432
+# Superuser secret: postgres-cluster-superuser (use or create app user from it).
+# Optional: enable backup to S3/R2 by uncommenting backup.barmanObjectStore and creating secret postgres-backup-creds.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-cluster
+  namespace: reiver-infra
+spec:
+  instances: 2
+  bootstrap:
+    initdb:
+      database: reiver
+  storage:
+    size: 10Gi
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  # Uncomment and set destinationPath + secret for backup to S3/R2. Create secret with ACCESS_KEY_ID, SECRET_ACCESS_KEY.
+  # backup:
+  #   barmanObjectStore:
+  #     destinationPath: "s3://your-bucket/reiver/postgres"
+  #     s3Credentials:
+  #       accessKeyId:
+  #         name: postgres-backup-creds
+  #         key: ACCESS_KEY_ID
+  #       secretAccessKey:
+  #         name: postgres-backup-creds
+  #         key: SECRET_ACCESS_KEY
+  #     retentionPolicy: "30d"

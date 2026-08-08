@@ -1,0 +1,19 @@
+<!-- ClickHouse Node Macros
+     Place in /etc/clickhouse-server/config.d/macros.xml on each ClickHouse node
+     
+     IMPORTANT: Each node must have unique values for {replica}
+     Nodes in the same shard share {shard} value
+-->
+<clickhouse>
+    <macros>
+        <!-- Cluster name - must match remote_servers cluster name -->
+        <cluster>datahippo_cluster</cluster>
+        
+        <!-- Shard identifier - same for all replicas in a shard -->
+        <shard>01</shard>
+        
+        <!-- Replica identifier - MUST BE UNIQUE per node -->
+        <!-- Change this on each node: replica01, replica02, etc. -->
+        <replica>replica01</replica>
+    </macros>
+</clickhouse>

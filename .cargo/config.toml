@@ -1,0 +1,4 @@
+# Enable Smithy `Document` / `Number` serde when `serde-deserialize` is on (see aws-smithy-types).
+# Required for `serde_json::from_value` → `Document` in the Bedrock provider.
+[build]
+rustflags = ["--cfg", "aws_sdk_unstable"]

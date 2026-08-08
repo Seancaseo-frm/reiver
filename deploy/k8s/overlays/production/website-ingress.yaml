@@ -1,0 +1,77 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reiver-website
+  namespace: reiver
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: reiver-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - reiver.ai
+        - www.reiver.ai
+      secretName: reiver-website-tls
+    - hosts:
+        - reiver.ai
+        - www.reiver.ai
+      secretName: reiver-website-tls
+  rules:
+    - host: reiver.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reiver-website
+                port:
+                  number: 3003
+    - host: www.reiver.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reiver-website
+                port:
+                  number: 3003
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reiver-website-old-redirect
+  namespace: reiver
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: reiver-redirect-https@kubernetescrd,reiver-redirect-reiver-to-reiver@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - reiver.ai
+        - www.reiver.ai
+      secretName: reiver-website-tls
+  rules:
+    - host: reiver.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reiver-website
+                port:
+                  number: 3003
+    - host: www.reiver.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reiver-website
+                port:
+                  number: 3003

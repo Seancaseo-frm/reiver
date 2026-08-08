@@ -1,0 +1,76 @@
+# DataHippo Agent Configuration Example
+
+[api]
+url = "https://api.datahippo.io"  # or "http://localhost:3000" for self-hosted
+api_key = "${DATAHIPPO_API_KEY}"  # Environment variable substitution
+timeout = 30  # HTTP timeout in seconds
+
+[intervals]
+system_metrics = 60    # Collect system metrics every 60s
+database_metrics = 60  # Collect database metrics every 60s
+heartbeat = 300        # Send heartbeat every 5 minutes
+
+[system_metrics]
+enabled = true
+# Optional: Hostname to tag system metrics with
+# If not set, will auto-detect from HOSTNAME env var or hostname command
+# hostname = "database-server"  # Uncomment to set custom hostname
+
+[system_metrics.cpu]
+enabled = true
+per_core = false  # Set to collect per-core metrics
+
+[system_metrics.memory]
+enabled = true
+
+[system_metrics.disk]
+enabled = true
+include_mounts = []  # Empty = all mounts
+exclude_mounts = ["/boot", "/snap"]  # Exclude specific mounts
+
+[system_metrics.network]
+enabled = true
+interfaces = []  # Empty = all interfaces
+exclude_loopback = true
+
+# Database monitoring - array of database configurations
+[[databases]]
+name = "main_postgres"
+type = "postgresql"
+enabled = true
+host = "localhost"
+port = 5432
+database = "postgres"
+username = "datahippo_user"
+password = "${DB_PASSWORD}"  # Environment variable
+
+# PostgreSQL specific settings
+[databases.pg_stat_statements]
+enabled = true
+limit = 10000
+
+# Collection settings
+[databases.query_metrics]
+enabled = true
+collection_interval = 60
+
+[databases.explain_plans]
+enabled = true
+slow_query_threshold_ms = 1000.0
+collection_interval = 60
+
+# Tags to attach to all metrics from this database
+databases.tags = [
+    "env:production",
+    "team:backend"
+]
+
+[logging]
+level = "info"  # debug, info, warn, error
+file = "/var/log/datahippo-agent.log"  # Optional log file
+stdout = true  # Also log to stdout
+
+[advanced]
+metrics_batch_size = 1000  # Send metrics in batches
+max_retries = 3
+retry_delay = 5  # Seconds between retries

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-watch-workers
+  namespace: reiver
+  labels:
+    app: reiver-watch-workers
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reiver-watch-workers
+  template:
+    metadata:
+      labels:
+        app: reiver-watch-workers
+    spec:
+      containers:
+        - name: worker
+          image: reiver-watch:latest
+          imagePullPolicy: Always
+          command: ["./reiver-watch"]
+          args: ["--mode", "workers"]
+          envFrom:
+            - secretRef:
+                name: reiver-watch
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: FLOW_URL
+              value: "http://reiver-flow.reiver.svc:3001"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger.reiver-infra.svc:4318"
+            - name: OTEL_PROJECT_ID
+              value: "00000000-0000-0000-0000-000000000000"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-watch-workers,service.version=c04e23aedba7f78a13bdb35e70baf1a7351bd9ea"
+          resources:
+            requests:
+              cpu: "750m"
+              memory: "1536Mi"
+            limits:
+              cpu: "2000m"
+              memory: "6Gi"

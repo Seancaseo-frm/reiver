@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-pond
+  namespace: reiver
+  labels:
+    app: reiver-pond
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: reiver-pond
+  template:
+    metadata:
+      labels:
+        app: reiver-pond
+    spec:
+      containers:
+        - name: api
+          image: reiver-pond:latest
+          imagePullPolicy: Always
+          command: ["./reiver-pond"]
+          args: ["--mode", "api"]
+          ports:
+            - containerPort: 3002
+              name: http
+            - containerPort: 5433
+              name: pgwire
+          envFrom:
+            - secretRef:
+                name: reiver-pond
+          env:
+            - name: PGWIRE_LISTEN_ADDR
+              value: "0.0.0.0:5433"
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-pond,service.version=c04e23aedba7f78a13bdb35e70baf1a7351bd9ea"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "5Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-pond
+  namespace: reiver
+  labels:
+    app: reiver-pond
+spec:
+  selector:
+    app: reiver-pond
+  ports:
+    - port: 3002
+      targetPort: http
+      name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-pond-pgwire
+  namespace: reiver
+  labels:
+    app: reiver-pond
+spec:
+  selector:
+    app: reiver-pond
+  ports:
+    - port: 5433
+      targetPort: pgwire
+      name: pgwire
+  type: ClusterIP

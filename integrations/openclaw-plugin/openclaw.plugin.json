@@ -1,0 +1,34 @@
+{
+  "id": "flow-gateway",
+  "name": "Flow LLM Gateway",
+  "version": "0.1.0",
+  "description": "Route OpenClaw agent traffic through the Flow LLM gateway for cost controls, guardrails, prompt management, and observability.",
+  "providers": ["flow"],
+  "configSchema": {
+    "type": "object",
+    "required": ["apiKey"],
+    "additionalProperties": false,
+    "properties": {
+      "gatewayUrl": {
+        "type": "string",
+        "default": "https://reiver.ai/api/gateway/v1",
+        "description": "Base URL of the Flow gateway (must expose /chat/completions)."
+      },
+      "apiKey": {
+        "type": "string",
+        "description": "Flow project API key."
+      }
+    }
+  },
+  "uiHints": {
+    "gatewayUrl": {
+      "label": "Gateway URL",
+      "placeholder": "https://reiver.ai/api/gateway/v1"
+    },
+    "apiKey": {
+      "label": "API Key",
+      "placeholder": "flow_...",
+      "sensitive": true
+    }
+  }
+}

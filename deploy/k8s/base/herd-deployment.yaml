@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-herd
+  namespace: reiver
+  labels:
+    app: reiver-herd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reiver-herd
+  template:
+    metadata:
+      labels:
+        app: reiver-herd
+    spec:
+      containers:
+        - name: api
+          image: reiver-herd:latest
+          imagePullPolicy: Always
+          command: ["./reiver-herd"]
+          args: ["--mode", "all"]
+          ports:
+            - containerPort: 3003
+              name: http
+          envFrom:
+            - secretRef:
+                name: reiver-herd
+          env:
+            - name: WEBSITE_URL
+              value: "http://reiver-website:3003"
+            - name: HERD_ENABLED
+              value: "true"
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-herd"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-herd
+  namespace: reiver
+  labels:
+    app: reiver-herd
+spec:
+  selector:
+    app: reiver-herd
+  ports:
+    - port: 3003
+      targetPort: http
+      name: http
+  type: ClusterIP

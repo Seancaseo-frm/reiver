@@ -1,0 +1,21 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-reiver-to-reiver
+  namespace: reiver
+spec:
+  redirectRegex:
+    regex: "^https?://(?:www\\.)?reiver\\.com(.*)"
+    replacement: "https://reiver.ai${1}"
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-docs-reiver-to-reiver
+  namespace: reiver
+spec:
+  redirectRegex:
+    regex: "^https?://docs\\.reiver\\.com(.*)"
+    replacement: "https://docs.reiver.ai${1}"
+    permanent: true

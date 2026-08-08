@@ -1,0 +1,26 @@
+# Argo CD Application: cert-manager (TLS certificate management).
+# Prerequisite for Redpanda TLS and any other components that need automatic certificates.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: reiver
+  source:
+    repoURL: https://github.com/your-org/reiver.git
+    path: deploy/gitops/cert-manager
+    targetRevision: HEAD
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

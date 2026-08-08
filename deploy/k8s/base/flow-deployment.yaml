@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reiver-flow
+  namespace: reiver
+  labels:
+    app: reiver-flow
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: reiver-flow
+  template:
+    metadata:
+      labels:
+        app: reiver-flow
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: reiver-flow
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: api
+          image: reiver-flow:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3001
+              name: http
+          envFrom:
+            - secretRef:
+                name: reiver-flow
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.node.name=$(K8S_NODE_NAME),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),service.name=reiver-flow,service.version=c04e23aedba7f78a13bdb35e70baf1a7351bd9ea"
+            - name: MOODENG_PROJECT_ID
+              value: "07ce3ace-5133-496a-ba55-9bf40bb5d3aa"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://reiver-watch:3000"
+            - name: OTEL_PROJECT_ID
+              value: "07ce3ace-5133-496a-ba55-9bf40bb5d3aa"
+            - name: HERD_URL
+              value: "http://reiver-herd:3003"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1536Mi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reiver-flow
+  namespace: reiver
+  labels:
+    app: reiver-flow
+spec:
+  selector:
+    app: reiver-flow
+  ports:
+    - port: 3001
+      targetPort: http
+      name: http
+  type: ClusterIP

@@ -1,0 +1,34 @@
+# Redpanda 2-broker cluster (Kafka API on 9092).
+# Service: redpanda.reiver-infra.svc:9092 → KAFKA_HOSTS=redpanda.reiver-infra.svc:9092
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: reiver-infra
+
+resources:
+  - create-topics-job.yaml
+
+helmCharts:
+  - name: redpanda
+    repo: https://charts.redpanda.com
+    version: "5.10.7"
+    releaseName: redpanda
+    namespace: reiver-infra
+    valuesInline:
+      statefulset:
+        replicas: 1
+      resources:
+        cpu:
+          cores: "1.5"
+        memory:
+          container:
+            max: "3Gi"
+          redpanda:
+            memory: "2Gi"
+      tls:
+        enabled: false
+      monitoring:
+        enabled: false
+      storage:
+        persistentVolume:
+          size: 20Gi

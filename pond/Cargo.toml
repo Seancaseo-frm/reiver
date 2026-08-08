@@ -1,0 +1,179 @@
+[package]
+name = "reiver-pond"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+
+[[bin]]
+name = "reiver-pond"
+path = "src/main.rs"
+
+[dependencies]
+reiver-core = { path = "../core" }
+
+# Web framework
+axum = { version = "0.8.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["io-util"] }
+async-stream = "0.3"
+
+# Database
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "chrono", "uuid", "json", "rust_decimal"] }
+clickhouse = { version = "0.14.1", features = ["inserter", "chrono", "uuid"] }
+klickhouse = { git = "https://github.com/Protryon/klickhouse", features = ["derive", "compression", "serde", "bb8"] }
+mongodb = "3.1"
+bson = "2.11"
+tiberius = { version = "0.12.3", default-features = false, features = ["chrono", "rust_decimal", "rustls"] }
+bb8-tiberius = "0.16.0"
+google-cloud-auth = "0.17"
+snowflake-connector-rs = "0.7"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+regex = "1.10"
+prost = "0.14"
+once_cell = "1.19"
+arc-swap = "1.7"
+rust_decimal = { version = "1.34", features = ["serde"] }
+
+# Redis
+redis = { version = "1.0.1", features = ["tokio-comp", "connection-manager"] }
+bb8 = "0.9.1"
+bb8-redis = "0.26.0"
+
+# Kafka
+rdkafka = { version = "0.38.0", features = ["cmake-build", "ssl", "gssapi-vendored", "libz-static"] }
+
+# Hashing
+sha2 = "0.10"
+ahash = { version = "0.8", features = ["serde"] }
+
+# Compact data structures
+compact_str = { version = "0.8", features = ["serde"] }
+smallvec = { version = "1", features = ["serde"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+
+# Synchronization
+parking_lot = "0.12"
+
+# Allocator
+tikv-jemallocator = "0.6"
+
+# Gzip decompression (for jemalloc heap profile output)
+flate2 = "1"
+
+# Caching
+lru = "0.12"
+quick_cache = "0.6"
+dashmap = "6"
+
+# Logging & Telemetry
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+opentelemetry = { version = "0.31.0", features = ["trace", "metrics", "logs"] }
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "metrics", "logs"] }
+opentelemetry-otlp = { version = "0.31.0", features = ["trace", "metrics", "logs", "http-proto", "reqwest-blocking-client"] }
+opentelemetry-appender-tracing = "0.31"
+opentelemetry-proto = { version = "0.31.0", features = ["gen-tonic-messages", "with-serde", "profiles"] }
+tracing-opentelemetry = "0.32"
+opentelemetry-instrumentation-tokio = "0.1"
+reiver-sdk = { path = "../sdk/rust", features = ["profiling", "rayon", "jemalloc"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# HTTP
+bytes = "1.5"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tower-http = { version = "0.6", features = ["trace"] }
+futures = "0.3"
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["io-util"] }
+
+# Data Warehouse
+parquet = "57"
+arrow = { version = "57", features = ["prettyprint"] }
+sqlparser = "0.52"
+datafusion = { version = "51", features = ["nested_expressions"] }
+datafusion-table-providers = { version = "0.9", features = ["postgres", "mysql"] }
+tokio-cron-scheduler = "0.13"
+croner = "2.2"
+fst = "0.4"
+regex-automata = { version = "0.4.14", features = ["dfa-build", "syntax", "dfa-search", "nfa-thompson"] }
+calamine = "0.26"
+memmap2 = "0.9.10"
+zstd = "0.13.3"
+object_store = { version = "0.12", features = ["aws", "gcp", "http"] }
+
+# Multi-strategy indexing
+roaring = "0.11"
+xorf = { version = "0.12", features = ["serde"] }
+cardinality-estimator = "1.0"
+wyhash = "0.5"
+bincode = "1.3"
+
+# Storage
+aws-sdk-s3 = "1"
+aws-config = { version = "1.8", features = ["behavior-version-latest"] }
+
+# Postgres wire protocol
+pgwire = "0.37"
+datafusion-pg-catalog = "0.13.1"
+postgres-types = "0.2"
+rustls-pemfile = "2"
+rustls-pki-types = "1"
+
+# Connector dependencies
+base64 = { version = "0.22", features = ["alloc"] }
+hex = "0.4"
+rand = "0.8"
+dotenv = "0.15"
+urlencoding = "2.1"
+shopify_api = "0.9.5"
+notion-client = "1.1.0"
+airtable-api = "0.1.36"
+gouqi = { version = "0.20.0", features = ["async"] }
+googleads-rs = "0.13.0"
+tonic = { version = "0.14", features = ["tls-ring", "tls-native-roots"] }
+time = "0.3"
+md5 = "0.7"
+clickhouse-data-type = "0.2.0"
+
+# UDF runtime (Go-to-Wasm compiler)
+gno-rs = { git = "https://github.com/your-org/govm.git", branch = "udf" }
+wasmtime = "41.0.3"
+rayon = "1"
+num_cpus = "1"
+
+# Linux-only: jemalloc heap profiling
+[target.'cfg(target_os = "linux")'.dependencies]
+tikv-jemallocator = { version = "0.6", features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
+jemalloc_pprof = "0.8"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3"
+wiremock = "0.6"
+mockito = "1"
+proptest = "1"
+http = "1"
+
+[[bench]]
+name = "warehouse_benchmarks"
+harness = false
+
+[[bench]]
+name = "realistic_io_benchmark"
+harness = false
+
+[[bench]]
+name = "file_size_benchmark"
+harness = false

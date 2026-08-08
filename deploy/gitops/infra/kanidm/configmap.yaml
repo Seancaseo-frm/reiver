@@ -1,0 +1,15 @@
+# Kanidm server configuration.
+# Update "domain" and "origin" to match your actual DNS before deploying.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kanidm-server-config
+  namespace: reiver-infra
+data:
+  server.toml: |
+    domain = "idm.reiver.ai"
+    origin = "https://idm.reiver.ai"
+    db_path = "/data/kanidm.db"
+    tls_chain = "/data/tls/tls.crt"
+    tls_key = "/data/tls/tls.key"
+    bindaddress = "0.0.0.0:8443"

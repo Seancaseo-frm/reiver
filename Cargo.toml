@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "core",
+    "flow",
+    "watch",
+    "website",
+    "mcp",
+    "herd",
+]
+exclude = [
+    "pond",
+    "sdk/rust",
+    "reiver-agent",
+    "examples/correlation_test",
+    "examples/apm_data_generator",
+    "watch/integrations/server/aws",
+    "watch/integrations/server/azure",
+    "watch/integrations/server/gcp",
+    "watch/integrations/server/oci",
+    "watch/integrations/server/snowflake",
+    "watch/integrations/server/webhooks",
+]

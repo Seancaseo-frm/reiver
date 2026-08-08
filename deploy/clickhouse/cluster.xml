@@ -1,0 +1,32 @@
+<!-- ClickHouse Cluster Configuration
+     Place in /etc/clickhouse-server/config.d/cluster.xml on each ClickHouse node
+-->
+<clickhouse>
+    <remote_servers>
+        <!-- Cluster name used in ON CLUSTER queries and Distributed tables -->
+        <datahippo_cluster>
+            <!-- Shard 1 - Add more <shard> blocks to add shards -->
+            <shard>
+                <!-- Replica 1 - Add more <replica> blocks to add replicas within shard -->
+                <replica>
+                    <host>clickhouse-1</host>
+                    <port>9000</port>
+                </replica>
+                <!-- Uncomment to add replica 2:
+                <replica>
+                    <host>clickhouse-2</host>
+                    <port>9000</port>
+                </replica>
+                -->
+            </shard>
+            <!-- Uncomment to add shard 2:
+            <shard>
+                <replica>
+                    <host>clickhouse-3</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+            -->
+        </datahippo_cluster>
+    </remote_servers>
+</clickhouse>

@@ -1,0 +1,26 @@
+# Bootstrap Application: watches this repo and applies project.
+# Apply this ONCE (setup-server.sh does it with REPO_URL). After that, push changes to
+# project-reiver.yaml and Argo CD will apply them automatically.
+# Replace REPLACE_REPO_URL with your repo (e.g. https://github.com/your-org/reiver.git).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-bootstrap
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: REPLACE_REPO_URL
+    path: deploy/gitops/argocd
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
