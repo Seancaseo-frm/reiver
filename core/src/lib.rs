@@ -62,6 +62,7 @@ pub mod promql;
 pub mod http_metrics;
 
 // Knowledge base embedding (local ONNX model for vector search)
+#[cfg(feature = "embeddings")]
 pub mod embeddings;
 
 // State

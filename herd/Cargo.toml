@@ -9,7 +9,7 @@ name = "reiver-herd"
 path = "src/main.rs"
 
 [dependencies]
-reiver-core = { path = "../core" }
+reiver-core = { path = "../core", default-features = false }
 
 # Web framework
 axum = { version = "0.8.8", features = ["macros"] }

@@ -5,8 +5,9 @@ edition = "2021"
 license = "BUSL-1.1"
 
 [features]
-default = []
+default = ["embeddings"]
 test-utils = []
+embeddings = ["dep:fastembed"]
 
 [dependencies]
 # Web framework
@@ -130,7 +131,7 @@ futures-util = "0.3"
 hex = "0.4"
 
 # Local embedding model for knowledge base vector search
-fastembed = "5"
+fastembed = { version = "5", optional = true }
 
 # HTTP utilities
 reqwest = { version = "0.11", features = ["json", "stream"] }
