@@ -25,19 +25,19 @@ spec:
       namespace: drone
     - server: https://kubernetes.default.svc
       namespace: drone-builds
-    - server: https://YOUR_SERVER_IP:6443
+    - server: https://185.16.36.134:6443
       namespace: reiver
-    - server: https://YOUR_SERVER_IP:6443
+    - server: https://185.16.36.134:6443
       namespace: reiver-infra
-    - server: https://YOUR_SERVER_IP:6443
+    - server: https://185.16.36.134:6443
       namespace: cert-manager
-    - server: https://YOUR_SERVER_IP:6443
+    - server: https://185.16.36.134:6443
       namespace: clickhouse-operator-system
-    - server: https://YOUR_SERVER_IP:6443
+    - server: https://185.16.36.134:6443
       namespace: kube-system
-    - server: https://YOUR_SERVER_IP:6443
+    - server: https://185.16.36.134:6443
       namespace: drone
-    - server: https://YOUR_SERVER_IP:6443
+    - server: https://185.16.36.134:6443
       namespace: drone-builds
   clusterResourceWhitelist:
     - group: '*'

@@ -16,29 +16,29 @@ resources:
   - website-pdb.yaml
   - flow-network-policy.yaml
 
-# Override images. CI replaces ghcr.io/your-org/reiver with ghcr.io/OWNER/REPO on release; set explicitly until first release.
+# Override images. CI replaces ghcr.io/reiver-ai/reiver with ghcr.io/OWNER/REPO on release; set explicitly until first release.
 images:
   - name: reiver-watch:latest
-    newName: ghcr.io/your-org/reiver-watch
+    newName: ghcr.io/reiver-ai/reiver-watch
     newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
   - name: reiver-flow:latest
-    newName: ghcr.io/your-org/reiver-flow
+    newName: ghcr.io/reiver-ai/reiver-flow
     newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
   # Pond disabled — re-enable when Pond launches
   # - name: reiver-pond:latest
-  #   newName: ghcr.io/your-org/reiver-pond
+  #   newName: ghcr.io/reiver-ai/reiver-pond
   #   newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
   - name: reiver-website:latest
-    newName: ghcr.io/your-org/reiver-website
+    newName: ghcr.io/reiver-ai/reiver-website
     newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
   - name: reiver-mcp:latest
-    newName: ghcr.io/your-org/reiver-mcp
+    newName: ghcr.io/reiver-ai/reiver-mcp
     newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
   - name: reiver-herd:latest
-    newName: ghcr.io/your-org/reiver-herd
+    newName: ghcr.io/reiver-ai/reiver-herd
     newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
   - name: reiver-docs:latest
-    newName: ghcr.io/your-org/reiver-docs
+    newName: ghcr.io/reiver-ai/reiver-docs
     newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
 
 # Allow pulling private ghcr.io images. Create secret once: kubectl create secret docker-registry ghcr.io-pull-secret -n reiver --docker-server=ghcr.io --docker-username=YOUR_GITHUB_USER --docker-password=YOUR_TOKEN

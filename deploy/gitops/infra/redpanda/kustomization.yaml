@@ -32,3 +32,5 @@ helmCharts:
       storage:
         persistentVolume:
           size: 20Gi
+      console:
+        enabled: false
