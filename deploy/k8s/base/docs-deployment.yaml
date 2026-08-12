@@ -18,7 +18,7 @@ spec:
       containers:
         - name: nginx
           image: reiver-docs:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
               name: http

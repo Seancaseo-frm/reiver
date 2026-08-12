@@ -27,7 +27,7 @@ spec:
       containers:
         - name: api
           image: reiver-flow:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3001
               name: http

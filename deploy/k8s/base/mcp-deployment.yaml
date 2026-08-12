@@ -18,7 +18,7 @@ spec:
       containers:
         - name: mcp
           image: reiver-mcp:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3002
               name: http

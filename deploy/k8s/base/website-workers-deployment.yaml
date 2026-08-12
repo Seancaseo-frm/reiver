@@ -18,7 +18,7 @@ spec:
       containers:
         - name: worker
           image: reiver-website:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["./reiver-website"]
           args: ["--mode", "workers"]
           envFrom:
