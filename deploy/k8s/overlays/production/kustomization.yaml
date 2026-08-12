@@ -16,26 +16,22 @@ resources:
   - website-pdb.yaml
   - flow-network-policy.yaml
 
-# Override images. CI replaces ghcr.io/reiver-ai/reiver with ghcr.io/OWNER/REPO on release; set explicitly until first release.
+# Local images (built on server, imported into k3s containerd)
 images:
   - name: reiver-watch:latest
-    newName: ghcr.io/reiver-ai/reiver-watch
+    newName: docker.io/library/reiver-watch
     newTag: latest
   - name: reiver-flow:latest
-    newName: ghcr.io/reiver-ai/reiver-flow
+    newName: docker.io/library/reiver-flow
     newTag: latest
-  # Pond disabled — re-enable when Pond launches
-  # - name: reiver-pond:latest
-  #   newName: ghcr.io/reiver-ai/reiver-pond
-  #   newTag: 9ca7ec762fa4aae725b04e4cf25aa1ab1b3cbc4c
   - name: reiver-website:latest
-    newName: ghcr.io/reiver-ai/reiver-website
+    newName: docker.io/library/reiver-website
     newTag: latest
   - name: reiver-mcp:latest
-    newName: ghcr.io/reiver-ai/reiver-mcp
+    newName: docker.io/library/reiver-mcp
     newTag: latest
   - name: reiver-herd:latest
-    newName: ghcr.io/reiver-ai/reiver-herd
+    newName: docker.io/library/reiver-herd
     newTag: latest
   - name: reiver-docs:latest
     newName: ghcr.io/reiver-ai/reiver-docs
