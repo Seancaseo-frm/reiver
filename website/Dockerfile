@@ -1,10 +1,7 @@
-# Builder stage
-# Latest stable Rust for deps (avoids repeated version bumps)
 FROM rust:bookworm AS builder
 
 WORKDIR /app
 
-# Install build dependencies for xmlsec (SAML), bindgen, and rdkafka
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libxml2-dev \
@@ -17,24 +14,29 @@ RUN apt-get update && apt-get install -y \
     libsasl2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Dependency cache layer ---
+COPY Cargo.toml Cargo.lock /app/
 COPY core/Cargo.toml /app/core/Cargo.toml
 COPY website/Cargo.toml /app/website/Cargo.toml
 
 RUN mkdir -p /app/core/src && echo "" > /app/core/src/lib.rs \
-    && mkdir -p /app/website/src && echo "fn main(){}" > /app/website/src/main.rs
+    && mkdir -p /app/website/src && echo "fn main(){}" > /app/website/src/main.rs \
+    && mkdir -p /app/watch/src && echo "fn main(){}" > /app/watch/src/main.rs \
+    && mkdir -p /app/flow/src && echo "fn main(){}" > /app/flow/src/main.rs \
+    && mkdir -p /app/mcp/src && echo "fn main(){}" > /app/mcp/src/main.rs \
+    && mkdir -p /app/herd/src && echo "fn main(){}" > /app/herd/src/main.rs
 
-WORKDIR /app/website
-RUN cargo build --release && rm -rf /app/core/src /app/website/src
+COPY watch/Cargo.toml /app/watch/Cargo.toml
+COPY flow/Cargo.toml /app/flow/Cargo.toml
+COPY mcp/Cargo.toml /app/mcp/Cargo.toml
+COPY herd/Cargo.toml /app/herd/Cargo.toml
 
-# --- Application build layer ---
+RUN cargo build --release -p reiver-website 2>/dev/null || true && rm -rf /app/core/src /app/website/src
+
 COPY core/ /app/core/
 COPY website/ /app/website/
 
-WORKDIR /app/website
-RUN cargo build --release
+RUN cargo build --release -p reiver-website
 
-# Runtime stage
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
@@ -47,8 +49,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY --from=builder /app/website/target/release/reiver-website /app/reiver-website
-COPY --from=builder /app/website/migrations /app/migrations
+COPY --from=builder /app/target/release/reiver-website /app/reiver-website
+COPY website/migrations /app/migrations
 
 EXPOSE 3003
 
