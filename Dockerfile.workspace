@@ -44,5 +44,5 @@ COPY website/ /app/website/
 COPY mcp/ /app/mcp/
 COPY herd/ /app/herd/
 
-ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
+ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld --cfg aws_sdk_unstable"
 RUN cargo build --release
