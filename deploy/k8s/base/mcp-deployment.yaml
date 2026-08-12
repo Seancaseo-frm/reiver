@@ -31,6 +31,8 @@ spec:
               value: "http://reiver-watch:3000"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://reiver-watch:3000"
+            - name: OTEL_PROJECT_ID
+              value: "07ce3ace-5133-496a-ba55-9bf40bb5d3aa"
             - name: K8S_NODE_NAME
               valueFrom:
                 fieldRef:
