@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     libxmlsec1-openssl \
     libclang-dev \
     clang \
+    lld \
     cmake \
     libssl-dev \
     libsasl2-dev \
@@ -43,4 +44,5 @@ COPY website/ /app/website/
 COPY mcp/ /app/mcp/
 COPY herd/ /app/herd/
 
+ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
 RUN cargo build --release
