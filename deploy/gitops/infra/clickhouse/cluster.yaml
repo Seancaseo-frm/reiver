@@ -30,12 +30,3 @@ spec:
       merge_tree:
         merge_with_ttl_timeout: 3600
         ttl_only_drop_parts: 1
-      storage_configuration:
-        disks:
-          default:
-            keep_free_space_bytes: 1073741824
-        policies:
-          tiered:
-            volumes:
-              - name: hot
-                disk: default
