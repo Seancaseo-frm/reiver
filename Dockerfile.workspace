@@ -21,18 +21,21 @@ COPY flow/Cargo.toml /app/flow/Cargo.toml
 COPY website/Cargo.toml /app/website/Cargo.toml
 COPY mcp/Cargo.toml /app/mcp/Cargo.toml
 COPY herd/Cargo.toml /app/herd/Cargo.toml
+COPY sdk/rust/Cargo.toml /app/sdk/rust/Cargo.toml
 
 RUN mkdir -p /app/core/src && echo "" > /app/core/src/lib.rs \
     && mkdir -p /app/watch/src && echo "fn main(){}" > /app/watch/src/main.rs \
     && mkdir -p /app/flow/src && echo "fn main(){}" > /app/flow/src/main.rs \
     && mkdir -p /app/website/src && echo "fn main(){}" > /app/website/src/main.rs \
     && mkdir -p /app/mcp/src && echo "fn main(){}" > /app/mcp/src/main.rs \
-    && mkdir -p /app/herd/src && echo "fn main(){}" > /app/herd/src/main.rs
+    && mkdir -p /app/herd/src && echo "fn main(){}" > /app/herd/src/main.rs \
+    && mkdir -p /app/sdk/rust/src && echo "" > /app/sdk/rust/src/lib.rs
 
 RUN cargo build --release 2>/dev/null || true
-RUN rm -rf /app/core/src /app/watch/src /app/flow/src /app/website/src /app/mcp/src /app/herd/src
+RUN rm -rf /app/core/src /app/watch/src /app/flow/src /app/website/src /app/mcp/src /app/herd/src /app/sdk/rust/src
 
 COPY core/ /app/core/
+COPY sdk/rust/ /app/sdk/rust/
 COPY watch/ /app/watch/
 COPY flow/ /app/flow/
 COPY website/ /app/website/
