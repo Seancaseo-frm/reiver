@@ -25,7 +25,7 @@ jobs:
 
     strategy:
       matrix:
-        project: [website, watch, flow, pond, mcp]
+        project: [website, watch, flow, mcp, herd, docs]
 
     steps:
       - name: Checkout repository
