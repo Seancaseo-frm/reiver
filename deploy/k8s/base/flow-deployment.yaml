@@ -57,6 +57,12 @@ spec:
               value: "07ce3ace-5133-496a-ba55-9bf40bb5d3aa"
             - name: HERD_URL
               value: "http://reiver-herd:3003"
+            - name: WATCH_URL
+              value: "http://reiver-watch:3000"
+            - name: WEBSITE_URL
+              value: "http://reiver-website:3003"
+            - name: FLOW_URL
+              value: "http://reiver-flow:3001"
           livenessProbe:
             httpGet:
               path: /health
