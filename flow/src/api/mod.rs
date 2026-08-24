@@ -18,6 +18,7 @@ pub mod llm_scores;
 pub mod llm_search;
 pub mod llm_sessions;
 pub mod llm_settings;
+pub mod llm_users;
 pub mod prompt_compiler;
 pub mod secret_slots;
 pub mod session_profiles;
@@ -80,6 +81,7 @@ pub fn create_flow_api_router() -> Router<Arc<FlowState>> {
         .nest("/gateway/v1", crate::gateway::create_gateway_router())
         // LLM Observability API endpoints
         .nest("/llm/sessions", llm_sessions::create_llm_sessions_router())
+        .nest("/llm/users", llm_users::create_llm_users_router())
         .nest("/llm/scores", llm_scores::create_llm_scores_router())
         .nest("/llm/metrics", llm_metrics::create_llm_metrics_router())
         .nest(

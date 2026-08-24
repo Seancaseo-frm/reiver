@@ -958,6 +958,11 @@ const promptHubItems = computed(() => {
       icon: LlmSessionsIcon,
     },
     {
+      name: 'Users',
+      href: props.currentProject ? `/p/${pslug.value}/llm/users` : '/projects',
+      icon: LlmSessionsIcon,
+    },
+    {
       name: 'Prompts',
       href: props.currentProject ? `/p/${pslug.value}/llm/prompts` : '/projects',
       icon: LlmPromptsIcon,

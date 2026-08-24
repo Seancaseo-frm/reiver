@@ -141,7 +141,7 @@
             <div class="space-y-3 text-sm">
               <div v-if="session.user_id" class="flex justify-between">
                 <span class="text-gray-500 dark:text-gray-400">User</span>
-                <span class="text-gray-900 dark:text-gray-100 font-mono text-xs">{{ session.user_id }}</span>
+                <router-link :to="`/p/${projectId}/llm/users/${encodeURIComponent(session.user_id)}`" class="text-primary-600 hover:underline font-mono text-xs break-all text-right ml-4">{{ session.user_id }}</router-link>
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500 dark:text-gray-400">Models</span>

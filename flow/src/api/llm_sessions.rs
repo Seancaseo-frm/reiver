@@ -53,7 +53,7 @@ pub struct ListSessionsParams {
 const MAX_LIMIT: u32 = 1000;
 
 /// Matched profile info returned in session summaries.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct MatchedProfile {
     pub profile_id: Uuid,
     pub profile_name: String,
@@ -63,6 +63,7 @@ pub struct MatchedProfile {
 #[derive(Debug, Serialize)]
 pub struct SessionSummary {
     pub session_id: String,
+    pub user_id: String,
     pub session_name: String,
     pub first_request_time: DateTime<Utc>,
     pub last_request_time: DateTime<Utc>,
@@ -96,6 +97,7 @@ async fn list_sessions(
     #[derive(Debug, sqlx::FromRow)]
     struct Row {
         session_id: String,
+        user_id: String,
         session_name: String,
         first_request_time: DateTime<Utc>,
         last_request_time: DateTime<Utc>,
@@ -132,7 +134,7 @@ async fn list_sessions(
     let where_clause = conditions.join(" AND ");
     let query_str = format!(
         r#"
-        SELECT session_id, session_name,
+        SELECT session_id, user_id, session_name,
                first_request_time, last_request_time,
                request_count, total_input_tokens, total_output_tokens,
                total_cost_usd, error_count,
@@ -188,6 +190,7 @@ async fn list_sessions(
                 .unwrap_or_default();
             SessionSummary {
                 session_id: r.session_id,
+                user_id: r.user_id,
                 session_name: r.session_name,
                 first_request_time: r.first_request_time,
                 last_request_time: r.last_request_time,
@@ -235,6 +238,7 @@ async fn list_sessions(
 #[derive(Debug, Serialize)]
 pub struct SessionDetail {
     pub session_id: String,
+    pub user_id: String,
     pub session_name: String,
     pub first_request_time: DateTime<Utc>,
     pub last_request_time: DateTime<Utc>,
@@ -261,6 +265,7 @@ async fn get_session_detail(
 
     #[derive(Debug, sqlx::FromRow)]
     struct Row {
+        user_id: String,
         session_name: String,
         first_request_time: DateTime<Utc>,
         last_request_time: DateTime<Utc>,
@@ -277,7 +282,7 @@ async fn get_session_detail(
 
     let row: Row = sqlx::query_as(
         r#"
-        SELECT session_name,
+        SELECT user_id, session_name,
                first_request_time, last_request_time,
                request_count, total_input_tokens, total_output_tokens,
                total_cost_usd, avg_latency_ms, error_count, models,
@@ -297,6 +302,7 @@ async fn get_session_detail(
 
     Ok(Json(SessionDetail {
         session_id,
+        user_id: row.user_id,
         session_name: row.session_name,
         first_request_time: row.first_request_time,
         last_request_time: row.last_request_time,

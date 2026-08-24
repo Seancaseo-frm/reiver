@@ -343,6 +343,16 @@ const routes = [
     meta: { requiresAuth: true, requiresProduct: 'prompt_hub' }
   },
   {
+    path: '/p/:id/llm/users',
+    component: () => import('./Pages/Llm/Users.vue'),
+    meta: { requiresAuth: true, requiresProduct: 'prompt_hub' }
+  },
+  {
+    path: '/p/:id/llm/users/:userId',
+    component: () => import('./Pages/Llm/UserDetail.vue'),
+    meta: { requiresAuth: true, requiresProduct: 'prompt_hub' }
+  },
+  {
     path: '/p/:id/llm/integrations',
     component: () => import('./Pages/Llm/Integrations.vue'),
     meta: { requiresAuth: true, requiresProduct: 'prompt_hub' }
