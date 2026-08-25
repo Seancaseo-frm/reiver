@@ -1272,7 +1272,6 @@ async fn test_empty_model_uses_first_from_models_array() {
 use reiver_flow::gateway::prompt_resolver::PromptVersionConfig;
 use reiver_flow::gateway::prompt_store::{InMemoryPromptStore, PromptConfigRow};
 use rust_decimal::Decimal;
-use std::sync::Arc;
 
 fn build_prompt_store() -> (Arc<InMemoryPromptStore>, uuid::Uuid, uuid::Uuid) {
     let project_id = test_project_id();
