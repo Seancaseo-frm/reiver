@@ -187,7 +187,7 @@ Or if the session was already enqueued for evaluation:
 { "session_id": "sess-abc-123", "status": "already_enqueued" }
 ```
 
-Both cases return `202`. The caller does not need to distinguish between them. `202` confirms scheduling, not completed evaluation; normally the evaluation runs approximately 30 seconds after the call. Verify that the session becomes queryable, and see the [Session and Identity Contract](/flow/session-telemetry) for the current restart-window caveat.
+Both cases return `202`. The caller does not need to distinguish between them. `202` confirms scheduling, not completed evaluation; normally the evaluation runs approximately 30 seconds after the call. Verify that the session becomes queryable, and see the [Session and Identity Contract](/flow/session-telemetry) for restart recovery behaviour.
 
 #### Example
 

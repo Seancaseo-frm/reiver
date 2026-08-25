@@ -6,9 +6,11 @@
 //! most recent request is older than 30 minutes. Only sessions within a
 //! 24-hour lookback window are discovered (no backfilling historical sessions).
 //!
-//! Redis SET-based deduplication prevents re-enqueuing sessions that are
-//! already in-flight for evaluation. The same dedup logic is shared with
-//! the explicit "end session" endpoint in `routes/mod.rs`.
+//! Redis per-session keys prevent re-enqueuing sessions that are already
+//! in-flight for evaluation. The same dedup logic is shared with the explicit
+//! "end session" endpoint in `routes/mod.rs`. Per-session expiry is important:
+//! a busy project must not keep a crashed reservation alive indefinitely by
+//! refreshing one shared set's TTL.
 
 use std::sync::Arc;
 
@@ -21,15 +23,21 @@ const IDLE_TIMEOUT_MINUTES: u32 = 30;
 const LOOKBACK_HOURS: u32 = 24;
 const EVAL_INTERVAL_SECS: u64 = 60;
 const BATCH_LIMIT: u32 = 1000;
-const REDIS_DEDUP_KEY: &str = "session_eval:enqueued";
+const REDIS_DEDUP_KEY_PREFIX: &str = "session_eval:enqueued";
 const REDIS_DEDUP_TTL_SECS: i64 = 7200; // 2 hours
+const REDIS_RESERVATION_TTL_SECS: i64 = 300; // 5 minutes
+
+/// Delay used by the explicit `/end` route before it sends the evaluation job.
+/// The short reservation TTL above must remain longer than this delay but
+/// shorter than idle discovery so a restarted task can be recovered.
+pub const END_SESSION_DELAY_SECS: u64 = 30;
 
 /// Result of an enqueue attempt via [`enqueue_session_eval`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnqueueResult {
     /// Session was newly enqueued for evaluation.
     Enqueued,
-    /// Session was already in the dedup set (no-op).
+    /// Session already has a dedup key (no-op).
     AlreadyEnqueued,
     /// Kafka send failed; dedup entry was rolled back.
     Failed,
@@ -48,9 +56,9 @@ pub async fn enqueue_session_eval(
     project_id: &str,
     session_id: &str,
 ) -> EnqueueResult {
-    let dedup_member = format!("{project_id}:{session_id}");
+    let dedup_key = dedup_key(project_id, session_id);
 
-    if !try_mark_enqueued(redis, &dedup_member).await {
+    if !try_mark_enqueued(redis, &dedup_key, REDIS_DEDUP_TTL_SECS).await {
         return EnqueueResult::AlreadyEnqueued;
     }
 
@@ -65,7 +73,7 @@ pub async fn enqueue_session_eval(
             %project_id, %session_id, error = %e,
             "Failed to enqueue session eval job"
         );
-        undo_mark_enqueued(redis, &dedup_member).await;
+        undo_mark_enqueued(redis, &dedup_key).await;
         return EnqueueResult::Failed;
     }
 
@@ -76,14 +84,37 @@ pub async fn enqueue_session_eval(
 /// Used by the `/end` endpoint to reserve the dedup slot before
 /// spawning the delayed Kafka send.
 pub async fn try_reserve_session(redis: &RedisPool, project_id: &str, session_id: &str) -> bool {
-    let dedup_member = format!("{project_id}:{session_id}");
-    try_mark_enqueued(redis, &dedup_member).await
+    let dedup_key = dedup_key(project_id, session_id);
+    try_mark_enqueued(redis, &dedup_key, REDIS_RESERVATION_TTL_SECS).await
+}
+
+/// Extend a successful explicit-end reservation to the normal deduplication
+/// lifetime after its Kafka message has been accepted.
+pub async fn confirm_session_enqueued(redis: &RedisPool, project_id: &str, session_id: &str) {
+    let dedup_key = dedup_key(project_id, session_id);
+    let Ok(mut conn) = redis.get().await else {
+        tracing::warn!(%project_id, %session_id, "Failed to extend session eval dedup TTL");
+        return;
+    };
+    let extended = redis::cmd("EXPIRE")
+        .arg(&dedup_key)
+        .arg(REDIS_DEDUP_TTL_SECS)
+        .query_async::<i64>(&mut *conn)
+        .await
+        .unwrap_or(0);
+    if extended != 1 {
+        tracing::warn!(
+            %project_id,
+            %session_id,
+            "Session eval reservation expired before confirmation"
+        );
+    }
 }
 
 /// Roll back a dedup reservation. Used when the delayed Kafka send fails.
 pub async fn unreserve_session(redis: &RedisPool, project_id: &str, session_id: &str) {
-    let dedup_member = format!("{project_id}:{session_id}");
-    undo_mark_enqueued(redis, &dedup_member).await;
+    let dedup_key = dedup_key(project_id, session_id);
+    undo_mark_enqueued(redis, &dedup_key).await;
 }
 
 /// Spawn the session evaluation producer as a background task.
@@ -187,41 +218,38 @@ async fn find_idle_sessions(clickhouse: &ClickHousePool) -> anyhow::Result<Vec<I
         .collect())
 }
 
-/// Remove a member from the dedup set -- used to roll back when the
-/// Kafka send fails after a successful `try_mark_enqueued`.
-async fn undo_mark_enqueued(redis: &RedisPool, member: &str) {
+fn dedup_key(project_id: &str, session_id: &str) -> String {
+    format!("{REDIS_DEDUP_KEY_PREFIX}:{project_id}:{session_id}")
+}
+
+/// Remove a per-session dedup key -- used to roll back when the Kafka send
+/// fails after a successful `try_mark_enqueued`.
+async fn undo_mark_enqueued(redis: &RedisPool, key: &str) {
     let Ok(mut conn) = redis.get().await else {
         return;
     };
-    let _ = redis::cmd("SREM")
-        .arg(REDIS_DEDUP_KEY)
-        .arg(member)
+    let _ = redis::cmd("DEL")
+        .arg(key)
         .query_async::<i64>(&mut *conn)
         .await;
 }
 
-/// Atomically add a session to the Redis dedup set. Returns `true` if the
-/// member was newly added (i.e. not already present), `false` if it was
-/// already in the set or on Redis error. Also refreshes the set TTL on
-/// successful addition.
-async fn try_mark_enqueued(redis: &RedisPool, member: &str) -> bool {
+/// Atomically create a per-session dedup key. Returns `true` if it was newly
+/// created, or `false` if that session is already reserved/enqueued or Redis
+/// is unavailable. Each session expires independently.
+async fn try_mark_enqueued(redis: &RedisPool, key: &str, ttl_secs: i64) -> bool {
     let Ok(mut conn) = redis.get().await else {
         return false;
     };
-    let added: i64 = redis::cmd("SADD")
-        .arg(REDIS_DEDUP_KEY)
-        .arg(member)
-        .query_async(&mut *conn)
-        .await
-        .unwrap_or(0);
-    if added == 1 {
-        let _ = redis::cmd("EXPIRE")
-            .arg(REDIS_DEDUP_KEY)
-            .arg(REDIS_DEDUP_TTL_SECS)
-            .query_async::<i64>(&mut *conn)
-            .await;
-    }
-    added == 1
+    let result = redis::cmd("SET")
+        .arg(key)
+        .arg("1")
+        .arg("NX")
+        .arg("EX")
+        .arg(ttl_secs)
+        .query_async::<Option<String>>(&mut *conn)
+        .await;
+    matches!(result, Ok(Some(_)))
 }
 
 #[cfg(test)]
@@ -238,10 +266,18 @@ mod tests {
     }
 
     #[test]
-    fn dedup_member_format() {
+    fn dedup_key_scopes_project_and_session() {
         let project_id = "proj-123";
         let session_id = "sess-456";
-        let member = format!("{project_id}:{session_id}");
-        assert_eq!(member, "proj-123:sess-456");
+        assert_eq!(
+            dedup_key(project_id, session_id),
+            "session_eval:enqueued:proj-123:sess-456"
+        );
+    }
+
+    #[test]
+    fn explicit_end_reservation_expires_before_idle_discovery() {
+        assert!(REDIS_RESERVATION_TTL_SECS > END_SESSION_DELAY_SECS as i64);
+        assert!(REDIS_RESERVATION_TTL_SECS < IDLE_TIMEOUT_MINUTES as i64 * 60);
     }
 }

@@ -68,7 +68,7 @@ curl --request POST \
 
 The endpoint is idempotent. It returns `202` and schedules evaluation after an approximately 30-second ingestion buffer; `202` confirms that scheduling, not that evaluation has completed. Reiver also discovers sessions after 30 minutes without a request. Treat that idle evaluator as protection for crashes, disconnects, and abandoned sessions—not as the application's primary definition of success or completion.
 
-Current operational caveat: the explicit-end path reserves a deduplication slot before its 30-second delay. If Flow restarts in that window, idle discovery still finds the session, but the existing reservation can delay re-enqueueing beyond the nominal 30-minute idle threshold. Always verify that an ended session becomes queryable before treating the integration as accepted.
+Restart recovery: the explicit-end path holds a short per-session reservation before its 30-second delay. If Flow restarts in that window, the immediate enqueue is lost, but the reservation expires well before the 30-minute idle threshold so idle discovery can enqueue the session normally. Always verify that an ended session becomes queryable before treating the integration as accepted.
 
 ## User identity rules
 

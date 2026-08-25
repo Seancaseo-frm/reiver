@@ -83,10 +83,6 @@ fn header_value(s: &str, fallback: &'static str) -> HeaderValue {
     HeaderValue::from_str(s).unwrap_or_else(|_| HeaderValue::from_static(fallback))
 }
 
-/// Delay between the explicit `/end` call and the Kafka enqueue, giving the
-/// ClickHouse batch buffer time to flush the last LLM request.
-const END_SESSION_DELAY_SECS: u64 = 30;
-
 /// Create the gateway router with all endpoints.
 pub fn create_gateway_router() -> Router<Arc<FlowState>> {
     Router::new()
@@ -102,8 +98,8 @@ pub fn create_gateway_router() -> Router<Arc<FlowState>> {
 /// Reserves a dedup slot immediately and returns 202. A background task
 /// waits 30 seconds (for ClickHouse buffer flush), then sends the Kafka
 /// evaluation job. If the pod restarts during the delay, the 30-minute
-/// idle poll discovers the session, but the outstanding Redis reservation
-/// can delay re-enqueueing until the shared deduplication entry expires.
+/// idle poll discovers the session after the short per-session reservation
+/// has expired, so the fallback can enqueue it safely.
 async fn end_session(
     State(state): State<Arc<FlowState>>,
     headers: HeaderMap,
@@ -141,7 +137,10 @@ async fn end_session(
     let sid = session_id.clone();
 
     tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(END_SESSION_DELAY_SECS)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(
+            crate::gateway::session_evaluator::END_SESSION_DELAY_SECS,
+        ))
+        .await;
 
         let message = reiver_core::kafka::SessionEvalJobKafkaMessage {
             project_id: pid.clone(),
@@ -158,6 +157,7 @@ async fn end_session(
             );
             crate::gateway::session_evaluator::unreserve_session(&redis, &pid, &sid).await;
         } else {
+            crate::gateway::session_evaluator::confirm_session_enqueued(&redis, &pid, &sid).await;
             tracing::info!(
                 project_id = %pid,
                 session_id = %sid,

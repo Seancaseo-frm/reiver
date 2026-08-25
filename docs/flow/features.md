@@ -115,7 +115,7 @@ requests.post(
 )
 ```
 
-The call idempotently schedules evaluation after an approximately 30-second ingestion buffer. Its `202` response is not proof that evaluation completed, so verify that the session becomes queryable. If you never call it, idle discovery finds the session after 30 minutes; see the [Session and Identity Contract](/flow/session-telemetry) for the current restart-window caveat.
+The call idempotently schedules evaluation after an approximately 30-second ingestion buffer. Its `202` response is not proof that evaluation completed, so verify that the session becomes queryable. If you never call it, idle discovery finds the session after 30 minutes; see the [Session and Identity Contract](/flow/session-telemetry) for restart recovery behaviour.
 
 See the [API Reference](/flow/api-reference) for full details.
 
