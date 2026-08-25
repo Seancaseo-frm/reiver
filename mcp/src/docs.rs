@@ -14,7 +14,7 @@ pub struct DocPage {
 
 /// Initialization guidance shared by the stdio and Streamable HTTP transports.
 /// Keep this concise: some MCP clients truncate server instructions.
-pub const SERVER_INSTRUCTIONS: &str = "Reiver MCP. Read agent://onboarding and gateway_settings.agent_soul first. Honour the selected Flow, Watch, or Complete track and only its definition of done. Reuse business context; confirm the Session and Identity Contract before correlation or labels, asking only about material gaps. Scopes are the hard boundary; the owner's assignment defines autonomy. Within explicit authority, act without repeated approval. Gateway and OTLP use SDK keys. Never expose credentials.";
+pub const SERVER_INSTRUCTIONS: &str = "Reiver MCP. First read agent://onboarding and gateway_settings.agent_soul. Honour the selected Flow, Watch, or Complete track and definition of done. Reuse business context. Confirm the Session and Identity Contract before correlation or labels; ask only about material gaps. Scopes are the hard boundary; the owner's assignment defines autonomy. Within authority, act without repeated approval. Verify traces, logs, metrics independently. Gateway and OTLP require SDK keys. Never expose credentials.";
 
 macro_rules! doc_page {
     ($uri:expr, $name:expr, $desc:expr, $path:expr) => {

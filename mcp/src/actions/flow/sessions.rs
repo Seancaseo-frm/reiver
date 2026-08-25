@@ -308,11 +308,12 @@ impl PlatformAction for EndSession {
         "end_session"
     }
     fn description(&self) -> &'static str {
-        "Mark an LLM session as ended, triggering evaluation ~30 seconds later \
-         instead of waiting for the 30-minute idle timeout. The session will be \
+        "Mark an LLM session as ended, scheduling evaluation after an approximately \
+         30-second ingestion buffer instead of waiting for idle discovery. The session will be \
          classified, matched against session profiles, and persisted. \
          Safe to call multiple times (idempotent). Returns 'evaluation_scheduled' \
-         on first call, 'already_enqueued' on subsequent calls."
+         on first call, 'already_enqueued' on subsequent calls. A successful call \
+         proves scheduling, not completed evaluation; verify that the session becomes queryable."
     }
     fn required_scope(&self) -> String {
         "llm:write".into()

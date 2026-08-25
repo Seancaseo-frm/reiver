@@ -101,7 +101,7 @@ import MarketingFooter from '../Home/MarketingFooter.vue';
 
 const keyCards = [
   { title: 'Provider key', location: 'Prompt Hub › Integrations', desc: 'Stored in Reiver only. Do not copy it into your app, repository or coding-agent environment.' },
-  { title: 'SDK key', location: 'Settings › General › SDK keys', desc: 'One value authenticates Flow and Watch. Bind it to two explicit application secrets.' },
+  { title: 'SDK key', location: 'Settings › General › SDK keys', desc: 'Select the Flow/Watch write scopes, then bind the one value to two explicit application secrets.' },
   { title: 'Agent token', location: 'Agents › Tokens', desc: 'A separate scoped MCP credential. It belongs only in the coding-agent environment.' },
 ];
 
@@ -145,7 +145,7 @@ const steps = [
     blocks: [
       { type: 'text', content: 'Create one SDK key, then bind its value twice in the application runtime. The values are currently identical; the names keep Flow and Watch configuration independent.' },
       { type: 'code', lang: 'bash · application runtime', content: 'export REIVER_FLOW_API_KEY="dh_..."\nexport REIVER_WATCH_API_KEY="dh_..."  # same SDK key value' },
-      { type: 'text', content: 'Create a separate agent token. Use <code>llm:read</code> and <code>observability:read</code> for evaluation. Add <code>llm:write</code> for autonomous prompt, label and gateway setup, and <code>observability:write</code> when the agent may also create dashboards or alerts.' },
+      { type: 'text', content: 'Create a separate agent token. Include <code>project:read</code> so the five MCP tools are available, plus <code>llm:read</code> and <code>observability:read</code> for evaluation. Add <code>llm:write</code> for autonomous prompt, label and gateway setup, and <code>observability:write</code> when the agent may also create dashboards or alerts. <code>project:read</code> does not permit project changes.' },
       { type: 'code', lang: 'bash · coding agent only', content: 'export REIVER_AGENT_TOKEN="dh_..."' },
       { type: 'note', label: 'Secret boundary', content: 'SDK keys and agent tokens both currently look like <code>dh_…</code>, but their stored types are not interchangeable. The provider key stays inside Reiver. The agent token never ships with the application. No credential belongs in source control or logs.' },
       { type: 'text', content: 'Have the coding agent write against the two SDK variable names; do not paste their values into its prompt. If it must launch the app, inject them into that disposable test process through the platform secret manager. Otherwise, let the application owner deploy the agent’s code changes into the configured test runtime.' },
@@ -186,7 +186,7 @@ const steps = [
     num: '6',
     title: 'Verify the complete loop',
     blocks: [
-      { type: 'text', content: 'For this Complete Reiver track, the agent must show evidence for: MCP resource access; provider test; a real application gateway request; actual provider and model; an application trace; a correlated structured log; an application or runtime metric; the confirmed Session and Identity Contract saved in Agent Soul; a <code>202</code> explicit session-end response; a second session with the same test user and a new session ID; and no secrets in source or output.' },
+      { type: 'text', content: 'For this Complete Reiver track, the agent must show evidence for: MCP resource access; provider test; a real application gateway request; actual provider and model; an application trace; a correlated structured log; an application or runtime metric; the confirmed Session and Identity Contract saved in Agent Soul; a <code>202</code> explicit session-end response followed by a queryable session; a second session with the same test user and a new session ID; and no secrets in source or output.' },
       { type: 'code', lang: 'bash · end the smoke-test session', content: 'curl --request POST \\\n  "https://reiver.ai/api/gateway/v1/sessions/onboarding-smoke-1/end" \\\n  --header "Authorization: Bearer $REIVER_FLOW_API_KEY"' },
       { type: 'warn', label: 'No partial credit', content: 'A 200 gateway response plus one trace is not full observability. Missing logs or metrics means their providers, processors/readers, exporters, or application instrumentation are not configured.' },
       { type: 'text', content: 'After every baseline check is green, the authorised agent should preserve the confirmed project context for future Reiver agent sessions, translate business outcomes into precise session labels, configure only relevant prompts, guardrails, profiles, dashboards and alerts, run synthetic success and failure sessions, and verify the result through MCP.' },

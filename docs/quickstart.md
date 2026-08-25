@@ -20,6 +20,8 @@ The target is not merely an HTTP `200`. A completed **Complete Reiver** integrat
 | SDK key | Reiver **Settings → General → SDK keys** | Application runtime | Bind the same value separately as `REIVER_FLOW_API_KEY` and `REIVER_WATCH_API_KEY` |
 | Agent token | Reiver **Agents → Tokens** | Coding agent only | `REIVER_AGENT_TOKEN` |
 
+For the shared onboarding SDK key, select `llm:write` and `observability:write`; the UI also selects their matching read scopes. Flow gateway requests require `llm:write`. Do not add project, billing, Herd, or agent-token capabilities to the application key.
+
 Flow and Watch accept the same SDK key value. Use two named secret bindings anyway. The explicit names prevent gateway and telemetry configuration from accidentally reading the wrong generic secret, and they let you split the credentials later without changing application code.
 
 SDK keys and agent tokens currently both use the visible `dh_...` format. The prefix does not make them interchangeable: Reiver records the key type and rejects an SDK key at MCP and an agent token at the application endpoints.
@@ -83,15 +85,15 @@ Do not continue on the basis of status alone. Unexpected provider or model heade
 
 ## 4. Connect the coding agent through MCP
 
-Create an agent token with `llm:read` and `observability:read`. Add `llm:write` or `observability:write` only when you want the agent to change Reiver configuration.
+Create an agent token with `project:read`, `llm:read`, and `observability:read`. The five MCP facade tools use `project:read` as their visibility gate, then enforce the relevant Flow or Watch scope for each operation. `project:read` does not permit project changes. Add `llm:write` or `observability:write` only when you want the agent to change Reiver configuration.
 
 There is no separate autonomy-mode selector. The token scopes determine what the agent technically can do; the assignment you give it determines what it is authorised to do.
 
 | Goal | Token scopes | Behaviour to request |
 |---|---|---|
-| Evaluate and verify | `llm:read`, `observability:read` | Inspect the application and Reiver, run read-only checks, and recommend changes |
-| Configure Flow autonomously | `llm:write`, `observability:read` | Create and test relevant prompts, labels, profiles and gateway controls within the assignment |
-| Configure the complete platform autonomously | `llm:write`, `observability:write` | Also create and verify relevant dashboards, alerts and Watch configuration |
+| Evaluate and verify | `project:read`, `llm:read`, `observability:read` | Inspect the application and Reiver, run read-only checks, and recommend changes |
+| Configure Flow autonomously | `project:read`, `llm:write`, `observability:read` | Create and test relevant prompts, labels, profiles and gateway controls within the assignment |
+| Configure the complete platform autonomously | `project:read`, `llm:write`, `observability:write` | Also create and verify relevant dashboards, alerts and Watch configuration |
 
 A write scope makes a tool available; it is not, by itself, an instruction to use every write action. A clear onboarding assignment can authorise the agent once to act autonomously within those scopes. It should then ask only when it needs to exceed the stated boundary.
 

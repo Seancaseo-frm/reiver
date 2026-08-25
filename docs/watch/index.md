@@ -19,7 +19,7 @@ Session/user attributes are optional for a purely technical Watch integration. C
 
 ## Credential and endpoint
 
-Create an SDK key under **Settings → General → SDK keys**. Bind its value to a Watch-specific application secret:
+Create an SDK key under **Settings → General → SDK keys** and select `observability:write`; the UI also selects `observability:read`. Bind its value to a Watch-specific application secret:
 
 ```bash
 export REIVER_WATCH_API_KEY="dh_..."

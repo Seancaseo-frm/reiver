@@ -43,7 +43,7 @@ Reiver's project settings, prompt and Playground selectors exclude `:batch` entr
 
 Sonnet 5, Opus 5, Fable 5 and recent Opus 4.7/4.8 models reject non-default `temperature`, `top_p` and `top_k` values. Reiver omits those unsupported values at the Anthropic adapter, including temperatures inherited from managed prompt versions. The Playground labels sampling as **provider default** for these models.
 
-Claude 5 uses adaptive thinking. Do not attach the legacy `thinking: {"type":"enabled","budget_tokens":...}` shape to Sonnet 5 or Fable 5. Reiver keeps their adaptive default and translates the legacy toggle to adaptive thinking where recent Opus models support it.
+Claude 5 uses adaptive thinking. Do not attach the legacy `thinking: {"type":"enabled","budget_tokens":...}` shape to Sonnet 5 or Fable 5. Reiver keeps the adaptive default and translates the legacy toggle where necessary. An explicit `thinking: {"type":"disabled"}` is preserved for default-on Sonnet 5 and Opus 5 instead of being silently ignored. Fable 5 and Mythos 5 are always-on models and reject attempts to disable thinking.
 
 ## Provider routing
 

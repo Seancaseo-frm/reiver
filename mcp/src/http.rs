@@ -279,7 +279,7 @@ pub async fn handle_mcp(
             let rpc_response = match request.method.as_str() {
                 "resources/list" => handle_list_resources(id.clone()),
                 "resources/read" => handle_read_resource(id.clone(), request.params),
-                "tools/list" => handle_list_tools(id.clone(), &state),
+                "tools/list" => handle_list_tools(id.clone(), &state, &context.scopes),
                 "tools/call" => {
                     handle_call_tool(id.clone(), &state, &context, request.params).await
                 }
@@ -332,8 +332,12 @@ fn handle_initialize(id: Option<serde_json::Value>, state: &McpHttpState) -> Jso
 }
 
 #[tracing::instrument(name = "mcp.tools.list", skip_all)]
-fn handle_list_tools(id: Option<serde_json::Value>, state: &McpHttpState) -> JsonRpcResponse {
-    let tools = state.registry.tools_list();
+fn handle_list_tools(
+    id: Option<serde_json::Value>,
+    state: &McpHttpState,
+    scopes: &[String],
+) -> JsonRpcResponse {
+    let tools = state.registry.tools_list_filtered(scopes);
     let tools_json = serde_json::to_value(&tools).unwrap_or(serde_json::json!([]));
     JsonRpcResponse::success(id, serde_json::json!({ "tools": tools_json }))
 }

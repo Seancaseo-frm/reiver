@@ -36,7 +36,7 @@ Session labels must represent business-readable outcomes rather than vague techn
 
 Reiver has no separate autonomy-mode selector. MCP token scopes are the hard technical boundary; the owner's assignment defines the behavioural authority inside that boundary.
 
-- llm:read and observability:read support evaluation and verification.
+- project:read exposes the five MCP facade tools but does not permit project changes; llm:read and observability:read then authorise product-specific evaluation and verification.
 - llm:write permits Flow configuration such as prompts, rollouts, labels, profiles and guardrails.
 - observability:write permits Watch configuration such as dashboards and alerts.
 
@@ -57,7 +57,7 @@ Write scopes expose capabilities but do not, by themselves, authorise unrelated 
 - Reiver user-correlation attribute: gen_ai.user.id
 - Reiver compatibility session attribute: gen_ai.session.id
 
-There is no separate Reiver session-start endpoint. The first accepted Flow request carrying a new x-reiver-session-id is its first recorded activity. End the session at the confirmed business terminal event with POST /api/gateway/v1/sessions/{session_id}/end; the idempotent call returns 202 and schedules evaluation after an approximately 30-second ingestion buffer. The 30-minute idle evaluator is a crash/abandonment fallback, not the primary success boundary. A second session for the same user must use a new session ID and retain the same stable pseudonymous user ID.
+There is no separate Reiver session-start endpoint. The first accepted Flow request carrying a new x-reiver-session-id is its first recorded activity. End the session at the confirmed business terminal event with POST /api/gateway/v1/sessions/{session_id}/end; the idempotent call returns 202 and schedules evaluation after an approximately 30-second ingestion buffer. The 202 is not proof of completed evaluation: verify that the session becomes queryable. The 30-minute idle evaluator is a crash/abandonment fallback, not the primary success boundary; a Flow restart during the explicit-end delay can leave a deduplication reservation that postpones re-enqueueing beyond the nominal idle threshold. A second session for the same user must use a new session ID and retain the same stable pseudonymous user ID.
 
 ## Completion criteria
 
@@ -65,7 +65,7 @@ Flow + Prompt Hub proves: provider connection; one real gateway request; actual 
 
 Watch proves: one real application trace; one known correlated structured log; one recent application or runtime metric; stable service identity across signals; UI or observability:read evidence; and secret hygiene.
 
-Complete Reiver proves all of the following: confirmed or well-supported business context and Session and Identity Contract; delegated authority; MCP resource access; provider test; a real gateway request; actual x-reiver-provider and x-reiver-model-used values; an application trace; a correlated structured log; an application or runtime metric; stable user and session identity; a 202 response from explicit session end; a second session with the same user and a new session ID; and no credentials in source or logs.
+Complete Reiver proves all of the following: confirmed or well-supported business context and Session and Identity Contract; delegated authority; MCP resource access; provider test; a real gateway request; actual x-reiver-provider and x-reiver-model-used values; an application trace; a correlated structured log; an application or runtime metric; stable user and session identity; a 202 response from explicit session end followed by a queryable session; a second session with the same user and a new session ID; and no credentials in source or logs.
 
 Endpoint variables alone do not initialize OpenTelemetry. Configure separate trace, log, and metric providers/exporters/processors or readers for the application's language and framework.
 

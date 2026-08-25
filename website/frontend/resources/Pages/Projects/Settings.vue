@@ -231,6 +231,11 @@
                 Scopes
               </label>
               <ScopeSelector v-model="newKeyScopes" :max-scopes="allScopes" />
+              <p class="mt-2 text-xs text-gray-500">
+                Flow requires <code>llm:write</code>. For Complete Reiver, also select
+                <code>observability:write</code>; each write selection includes its matching read scope.
+                Leave project, billing, and Herd scopes off application keys unless the app genuinely needs them.
+              </p>
             </div>
 
             <div>

@@ -21,7 +21,7 @@ Gateway-only users can stop when the provider, gateway, routing, and secret chec
 
 1. Add one provider key in Reiver under **Prompt Hub → Integrations**.
 2. Run the provider connection test.
-3. Create an SDK key under **Settings → General → SDK keys**.
+3. Create an SDK key under **Settings → General → SDK keys** and select `llm:write`; the UI also selects `llm:read`. Flow gateway requests require `llm:write`.
 4. Bind it in the application runtime as `REIVER_FLOW_API_KEY`.
 
 Provider keys remain in Reiver. They are not placed in the application or given to the coding agent.

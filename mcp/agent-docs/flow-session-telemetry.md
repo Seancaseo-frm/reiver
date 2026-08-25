@@ -35,7 +35,9 @@ Do not use a long-lived user/account ID as the session ID. Do not create a new s
 
 There is no separate Reiver session-start call. The first accepted Flow request with a new `x-reiver-session-id` becomes the session's first recorded activity. Create or select the ID at the application's real start event, normally by reusing a conversation/task/job ID or creating an opaque backend ID.
 
-Call `POST /api/gateway/v1/sessions/{session_id}/end` at a real terminal event. The call is idempotent, returns `202`, and schedules evaluation after an approximately 30-second ingestion buffer. Reiver's 30-minute idle evaluator remains a crash/abandonment fallback; it is not the primary business definition of completion.
+Call `POST /api/gateway/v1/sessions/{session_id}/end` at a real terminal event. The call is idempotent, returns `202`, and schedules evaluation after an approximately 30-second ingestion buffer; `202` confirms scheduling, not completed evaluation. Reiver's 30-minute idle evaluator remains a crash/abandonment fallback; it is not the primary business definition of completion.
+
+Current operational caveat: explicit end reserves a deduplication slot before the delay. If Flow restarts in that window, idle discovery still finds the session, but that reservation can delay re-enqueueing beyond the nominal 30-minute threshold. Verify that the ended session becomes queryable before accepting the integration.
 
 ## Identity rules
 

@@ -115,7 +115,7 @@ requests.post(
 )
 ```
 
-The session will be evaluated approximately 30 seconds later. This is idempotent — calling it multiple times for the same session is safe. If you never call it, the 30-minute idle timeout still works as a fallback.
+The call idempotently schedules evaluation after an approximately 30-second ingestion buffer. Its `202` response is not proof that evaluation completed, so verify that the session becomes queryable. If you never call it, idle discovery finds the session after 30 minutes; see the [Session and Identity Contract](/flow/session-telemetry) for the current restart-window caveat.
 
 See the [API Reference](/flow/api-reference) for full details.
 

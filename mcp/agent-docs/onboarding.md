@@ -43,8 +43,9 @@ Use the confirmed context to explain the combined operating loop: Flow controls 
 
 Reiver has no separate autonomy-mode setting. The MCP token scopes are the hard technical boundary; the owner's assignment defines the behavioural authority inside that boundary.
 
-- With `llm:read` and `observability:read`, inspect, verify and recommend only.
-- With `llm:write` and/or `observability:write`, write actions are available but are not automatically authorised merely because the token permits them.
+- Include `project:read` so the five MCP facade tools are visible. It does not permit project changes; each operation also enforces its Flow or Watch scope after dispatch.
+- With `project:read`, `llm:read` and `observability:read`, inspect, verify and recommend only.
+- With `project:read` plus `llm:write` and/or `observability:write`, product write actions are available but are not automatically authorised merely because the token permits them.
 - An instruction such as "integrate and configure Reiver autonomously" is explicit authority to perform relevant in-scope setup, testing, prompt operations and verification without repeatedly asking for approval.
 
 Infer the intended authority from the owner's assignment. If the first write is material and that authority is unclear, ask one focused question before writing. Once authority is clear, do not ask again for every in-scope prompt version, test, rollout, label, profile, guardrail, dashboard or alert.
@@ -149,7 +150,7 @@ Return the pass/fail table for the selected track with concrete, non-secret evid
 
 Use MCP `list` with `resource: "metric_names"` before querying metrics. Use `trace_attribute_keys` and `log_attribute_keys` to discover what arrived. Use `search` with `source: "logs"` and attribute filters for the test conversation. Never include a credential value in tool arguments or results.
 
-If the token lacks `observability:read` or `llm:read`, state the missing scope and leave the affected row as unverified.
+If the token lacks `project:read`, the facade tools are unavailable. If it lacks `observability:read` or `llm:read`, the corresponding product operations are unavailable. State the missing scope and leave the affected row as unverified.
 
 Do not mark a standalone Flow integration incomplete because Watch rows are absent. Do not mark a standalone Watch integration incomplete because provider, gateway, or Flow-session rows are absent.
 

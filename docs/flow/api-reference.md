@@ -167,7 +167,7 @@ PII masking and content policy guardrails apply to embedding input text, same as
 
 ### POST /sessions/{session_id}/end
 
-Mark an LLM session as ended, triggering evaluation ~30 seconds later instead of waiting for the 30-minute idle timeout. The session will be classified, matched against session profiles, and persisted.
+Mark an LLM session as ended, scheduling evaluation after an approximately 30-second ingestion buffer instead of waiting for idle discovery. The session will be classified, matched against session profiles, and persisted.
 
 **Full path:** `POST /api/gateway/v1/sessions/{session_id}/end`
 
@@ -187,7 +187,7 @@ Or if the session was already enqueued for evaluation:
 { "session_id": "sess-abc-123", "status": "already_enqueued" }
 ```
 
-Both cases return `202`. The caller does not need to distinguish between them. The evaluation runs approximately 30 seconds after the call.
+Both cases return `202`. The caller does not need to distinguish between them. `202` confirms scheduling, not completed evaluation; normally the evaluation runs approximately 30 seconds after the call. Verify that the session becomes queryable, and see the [Session and Identity Contract](/flow/session-telemetry) for the current restart-window caveat.
 
 #### Example
 

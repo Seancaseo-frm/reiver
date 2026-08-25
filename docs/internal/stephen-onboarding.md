@@ -43,11 +43,11 @@ Stephen should have:
 Stephen performs these actions in his own browser and secret manager:
 
 1. Add the Anthropic key under **Prompt Hub → Integrations** and run **Test**. This proves authentication only; do not treat it as proof of a model call.
-2. Create one SDK key under **Settings → General → SDK keys**.
+2. Create one SDK key under **Settings → General → SDK keys**. Select `llm:write` and `observability:write`; the UI also selects their matching read scopes. Flow requires `llm:write`; do not add project, billing, or Herd scopes to the application key.
 3. Bind the same SDK key value to two distinct application secrets:
    - `REIVER_FLOW_API_KEY`
    - `REIVER_WATCH_API_KEY`
-4. For read-only evaluation, create an agent token under **Agents → Tokens** with `llm:read` and `observability:read`. For the autonomous setup agreed for this pilot, select `llm:write` and `observability:write`; each write scope includes its matching read access.
+4. For read-only evaluation, create an agent token under **Agents → Tokens** with `project:read`, `llm:read` and `observability:read`. For the autonomous setup agreed for this pilot, keep `project:read` and select `llm:write` and `observability:write`; each write scope includes its matching read access. `project:read` is required to expose the five facade tools and does not permit project changes.
 5. Bind that token as `REIVER_AGENT_TOKEN` in the coding-agent environment only.
 
 There is no autonomy-mode selector. The token scopes are the hard technical boundary and Stephen's pasted assignment is the behavioural authority. Do not add `project:write`; it is unnecessary for normal application onboarding. Do not put the agent token in the application runtime.

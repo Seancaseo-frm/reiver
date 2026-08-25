@@ -101,7 +101,7 @@ Any MCP client that supports Streamable HTTP transport can connect. Point it at:
 
 Agent tokens have configurable scopes that control which tools the agent can access. Tools requiring a scope the token doesn't have are hidden entirely.
 
-For onboarding, select the read scopes you need—normally `llm:read` and `observability:read`. A write scope implicitly grants the corresponding read scope—for example, `llm:write` also grants `llm:read`.
+For onboarding, include `project:read` so the five facade tools are visible, then select the product scopes you need—normally `llm:read` and `observability:read`. Each operation still enforces its product scope after dispatch, and `project:read` does not permit project changes. A write scope implicitly grants the corresponding read scope—for example, `llm:write` also grants `llm:read`.
 
 To grant an agent write access, include the write scopes when creating the token under **Agents → Tokens**.
 
@@ -109,9 +109,9 @@ To grant an agent write access, include the write scopes when creating the token
 
 Reiver has no separate autonomy-mode selector. The token scopes are the hard technical boundary; the instruction you give the coding agent defines its behavioural authority inside that boundary.
 
-- For an evaluation, grant `llm:read` and `observability:read` and ask the agent to inspect, verify and recommend only.
-- For autonomous Flow setup, grant `llm:write` and tell the agent which prompt, rollout, label, profile and gateway changes it may make.
-- Add `observability:write` when it may also create dashboards, alerts or other Watch configuration.
+- For an evaluation, grant `project:read`, `llm:read` and `observability:read`, and ask the agent to inspect, verify and recommend only.
+- For autonomous Flow setup, keep `project:read`, grant `llm:write`, and tell the agent which prompt, rollout, label, profile and gateway changes it may make.
+- Add `observability:write` when it may also create dashboards, alerts or other Watch configuration; keep `project:read` so the facade tools remain available.
 
 If the owner's instruction clearly authorises autonomous onboarding, the agent should not request approval again for every in-scope action. If the first material write is not clearly authorised, it should ask one focused question before writing. A broad write scope is capability, not permission to change unrelated resources.
 

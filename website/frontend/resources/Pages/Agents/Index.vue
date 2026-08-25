@@ -544,7 +544,9 @@ const copiedReveal = ref(false);
 const creatingKey = ref(false);
 
 const newKeyLabel = ref('');
-const ONBOARDING_AGENT_SCOPES = ['llm:read', 'observability:read'];
+// All five MCP facade tools use project:read as their outer visibility gate;
+// the resource-specific Flow/Watch scope is enforced after dispatch.
+const ONBOARDING_AGENT_SCOPES = ['project:read', 'llm:read', 'observability:read'];
 const newKeyScopes = ref([...ONBOARDING_AGENT_SCOPES]);
 const newKeyExpiresAt = ref('');
 

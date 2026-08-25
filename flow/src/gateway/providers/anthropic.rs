@@ -860,9 +860,14 @@ fn uses_adaptive_thinking(model: &str) -> bool {
 
 fn has_default_adaptive_thinking(model: &str) -> bool {
     let normalized = model.replace('.', "-");
-    ["claude-sonnet-5", "claude-fable-5", "claude-mythos-5"]
-        .iter()
-        .any(|family| model_is_in_family(&normalized, family))
+    [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-mythos-5",
+    ]
+    .iter()
+    .any(|family| model_is_in_family(&normalized, family))
 }
 
 fn anthropic_sampling_parameters(
@@ -887,11 +892,24 @@ fn anthropic_thinking_config(
     model: &str,
     thinking: Option<&ThinkingConfig>,
 ) -> Option<AnthropicThinkingConfig> {
-    let requested = thinking.filter(|config| config.thinking_type == ThinkingToggle::Enabled)?;
+    let requested = thinking?;
 
-    // Sonnet 5 and Fable/Mythos 5 already run adaptive thinking and reject the
-    // legacy `enabled + budget_tokens` shape exposed by the OpenAI-compatible
-    // Reiver request. Omitting the field preserves their provider default.
+    if requested.thinking_type == ThinkingToggle::Disabled {
+        // Omitting this field is equivalent to disabled on older models, but
+        // Opus 5 and Sonnet 5 default to thinking on. Forward an explicit
+        // disable for default-on families instead of silently changing the
+        // caller's request. Fable/Mythos are always-on; forwarding the field
+        // lets Anthropic reject that unsupported request rather than masking it.
+        return has_default_adaptive_thinking(model).then(|| AnthropicThinkingConfig {
+            thinking_type: "disabled".to_string(),
+            budget_tokens: None,
+        });
+    }
+
+    // Opus 5, Sonnet 5 and Fable/Mythos 5 already run adaptive thinking and
+    // reject the legacy `enabled + budget_tokens` shape exposed by the
+    // OpenAI-compatible Reiver request. Omitting the field preserves their
+    // provider default.
     if has_default_adaptive_thinking(model) {
         tracing::debug!(model, "Using Anthropic's default adaptive thinking");
         return None;
@@ -1310,6 +1328,24 @@ mod tests {
             anthropic_thinking_config("claude-sonnet-4-6", Some(&requested)).unwrap();
         assert_eq!(legacy.thinking_type, "enabled");
         assert_eq!(legacy.budget_tokens, Some(8_000));
+    }
+
+    #[test]
+    fn test_explicit_disabled_is_not_lost_for_default_on_models() {
+        let requested = ThinkingConfig {
+            thinking_type: ThinkingToggle::Disabled,
+            budget_tokens: None,
+        };
+
+        for model in ["claude-opus-5", "claude-sonnet-5", "claude-fable-5"] {
+            let config = anthropic_thinking_config(model, Some(&requested)).unwrap();
+            assert_eq!(config.thinking_type, "disabled");
+            assert!(config.budget_tokens.is_none());
+        }
+
+        // Earlier/default-off models remain disabled by omission.
+        assert!(anthropic_thinking_config("claude-opus-4.8", Some(&requested)).is_none());
+        assert!(anthropic_thinking_config("claude-sonnet-4-6", Some(&requested)).is_none());
     }
 
     #[test]

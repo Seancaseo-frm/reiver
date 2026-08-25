@@ -102,7 +102,8 @@ pub fn create_gateway_router() -> Router<Arc<FlowState>> {
 /// Reserves a dedup slot immediately and returns 202. A background task
 /// waits 30 seconds (for ClickHouse buffer flush), then sends the Kafka
 /// evaluation job. If the pod restarts during the delay, the 30-minute
-/// idle poll picks up the session as a fallback.
+/// idle poll discovers the session, but the outstanding Redis reservation
+/// can delay re-enqueueing until the shared deduplication entry expires.
 async fn end_session(
     State(state): State<Arc<FlowState>>,
     headers: HeaderMap,
