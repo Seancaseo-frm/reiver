@@ -45,6 +45,14 @@ const SKIP_HEADERS: &[&str] = &[
     "x-user-id",
     "x-user-jwt",
     "x-key-scopes",
+    "x-organization-id",
+    "x-billing-project-id",
+    "x-creator-type",
+    "x-creator-key-label",
+    "x-creator-key-prefix",
+    "x-audit-origin-type",
+    "x-audit-origin-ref",
+    "x-audit-origin-reason",
 ];
 
 /// Extract the raw JWT from the Authorization header or token cookie.
@@ -202,11 +210,12 @@ async fn check_product_access_by_org(
     org_id: Uuid,
     product: Product,
 ) -> Result<(), Response> {
-    let tier = state
-        .entitlements
-        .get_config(org_id)
-        .await
-        .map_err(|_| proxy_error(StatusCode::INTERNAL_SERVER_ERROR, "Entitlement check failed"))?;
+    let tier = state.entitlements.get_config(org_id).await.map_err(|_| {
+        proxy_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Entitlement check failed",
+        )
+    })?;
 
     if tier.config.is_product_enabled(product) {
         Ok(())
@@ -216,7 +225,10 @@ async fn check_product_access_by_org(
             Product::PromptHub => "Prompt Hub",
             Product::Herd => "Herd",
         };
-        Err(proxy_error(StatusCode::FORBIDDEN, &format!("{} is not available on your current plan", product_name)))
+        Err(proxy_error(
+            StatusCode::FORBIDDEN,
+            &format!("{} is not available on your current plan", product_name),
+        ))
     }
 }
 
@@ -1206,9 +1218,12 @@ pub async fn proxy_to_mcp(
     if let Some(ref auth) = auth_value {
         if let Some(api_key) = auth.strip_prefix("Bearer ") {
             if let Ok(project_id) =
-                crate::utils::validate_project_key_cached(&state.redis, state.db.as_ref(), api_key).await
+                crate::utils::validate_project_key_cached(&state.redis, state.db.as_ref(), api_key)
+                    .await
             {
-                if let Err(resp) = check_product_access(&state, project_id, Product::PromptHub).await {
+                if let Err(resp) =
+                    check_product_access(&state, project_id, Product::PromptHub).await
+                {
                     return resp;
                 }
             }
@@ -1255,7 +1270,8 @@ pub async fn proxy_to_herd_a2a(
     if let Some(ref auth) = auth_value {
         if let Some(api_key) = auth.strip_prefix("Bearer ") {
             if let Ok(project_id) =
-                crate::utils::validate_project_key_cached(&state.redis, state.db.as_ref(), api_key).await
+                crate::utils::validate_project_key_cached(&state.redis, state.db.as_ref(), api_key)
+                    .await
             {
                 if let Err(resp) = check_product_access(&state, project_id, Product::Herd).await {
                     return resp;
@@ -1362,6 +1378,29 @@ pub async fn proxy_to_flow_model_catalog(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_skip_headers_includes_trusted_identity_and_audit_headers() {
+        for header in [
+            "x-project-id",
+            "x-user-id",
+            "x-user-jwt",
+            "x-key-scopes",
+            "x-organization-id",
+            "x-billing-project-id",
+            "x-creator-type",
+            "x-creator-key-label",
+            "x-creator-key-prefix",
+            "x-audit-origin-type",
+            "x-audit-origin-ref",
+            "x-audit-origin-reason",
+        ] {
+            assert!(
+                SKIP_HEADERS.contains(&header),
+                "trusted header must be stripped before the proxy adds its own value: {header}"
+            );
+        }
+    }
 
     #[test]
     fn test_extract_project_id() {

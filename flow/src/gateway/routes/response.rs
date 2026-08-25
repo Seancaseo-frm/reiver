@@ -933,12 +933,9 @@ fn emit_project_streaming_otel(
     if error.is_some() {
         let mut err_labels = labels.clone();
         err_labels.insert("error.type".into(), "stream_error".into());
-        state.otel_publisher.emit_counter(
-            project_id,
-            "gen_ai.client.error",
-            1.0,
-            err_labels,
-        );
+        state
+            .otel_publisher
+            .emit_counter(project_id, "gen_ai.client.error", 1.0, err_labels);
     }
 
     // Build span

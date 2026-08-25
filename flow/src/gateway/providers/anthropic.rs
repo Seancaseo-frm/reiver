@@ -18,8 +18,8 @@ use crate::gateway::provider_types::Provider;
 use crate::gateway::types::{
     find_system_message_text, non_system_messages, AssistantMessage, ChatCompletionChunk,
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, ChunkChoice, ChunkDelta,
-    FunctionCall, MessageContent, MessageRole, PromptTokensDetails, ThinkingContent, ThinkingType,
-    ThinkingConfig, ThinkingToggle, ToolCall, ToolType, Usage,
+    FunctionCall, MessageContent, MessageRole, PromptTokensDetails, ThinkingConfig,
+    ThinkingContent, ThinkingToggle, ThinkingType, ToolCall, ToolType, Usage,
 };
 
 const ANTHROPIC_API_BASE: &str = "https://api.anthropic.com/v1";
@@ -462,11 +462,8 @@ impl LlmProvider for AnthropicProvider {
         let url = format!("{}/messages", self.api_base);
         let options = AnthropicRequestOptions::for_model(&request.model);
         let thinking = anthropic_thinking_config(&request.model, request.thinking.as_ref());
-        let (temperature, top_p) = anthropic_sampling_parameters(
-            &request.model,
-            request.temperature,
-            request.top_p,
-        );
+        let (temperature, top_p) =
+            anthropic_sampling_parameters(&request.model, request.temperature, request.top_p);
 
         let tools = self.convert_tools(&request.tools);
 
@@ -567,11 +564,8 @@ impl LlmProvider for AnthropicProvider {
         let url = format!("{}/messages", self.api_base);
         let options = AnthropicRequestOptions::for_model(&request.model);
         let thinking = anthropic_thinking_config(&request.model, request.thinking.as_ref());
-        let (temperature, top_p) = anthropic_sampling_parameters(
-            &request.model,
-            request.temperature,
-            request.top_p,
-        );
+        let (temperature, top_p) =
+            anthropic_sampling_parameters(&request.model, request.temperature, request.top_p);
         let tools = self.convert_tools(&request.tools);
 
         let anthropic_request = AnthropicRequest {
@@ -941,8 +935,7 @@ impl AnthropicRequestOptions {
     fn for_model(model: &str) -> Self {
         let normalized = model.replace('.', "-");
         let fast_base = normalized.strip_suffix("-fast").filter(|base| {
-            model_is_in_family(base, "claude-opus-4-8")
-                || model_is_in_family(base, "claude-opus-5")
+            model_is_in_family(base, "claude-opus-4-8") || model_is_in_family(base, "claude-opus-5")
         });
 
         match fast_base {
@@ -1275,13 +1268,9 @@ mod tests {
         assert!(uses_provider_managed_sampling("claude-sonnet-5"));
         assert!(uses_provider_managed_sampling("claude-opus-5-fast"));
         assert!(uses_provider_managed_sampling("claude-opus-4.8"));
-        assert!(uses_provider_managed_sampling(
-            "claude-fable-5-20260609"
-        ));
+        assert!(uses_provider_managed_sampling("claude-fable-5-20260609"));
         assert!(!uses_provider_managed_sampling("claude-sonnet-4-6"));
-        assert!(!uses_provider_managed_sampling(
-            "claude-haiku-4-5-20251001"
-        ));
+        assert!(!uses_provider_managed_sampling("claude-haiku-4-5-20251001"));
     }
 
     #[test]
@@ -1324,8 +1313,7 @@ mod tests {
         assert_eq!(opus.thinking_type, "adaptive");
         assert!(opus.budget_tokens.is_none());
 
-        let legacy =
-            anthropic_thinking_config("claude-sonnet-4-6", Some(&requested)).unwrap();
+        let legacy = anthropic_thinking_config("claude-sonnet-4-6", Some(&requested)).unwrap();
         assert_eq!(legacy.thinking_type, "enabled");
         assert_eq!(legacy.budget_tokens, Some(8_000));
     }

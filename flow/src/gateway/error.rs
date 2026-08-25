@@ -111,6 +111,9 @@ pub enum GatewayError {
     /// Internal gateway error.
     InternalError(String),
 
+    /// A required internal service is temporarily unavailable.
+    ServiceUnavailable(String),
+
     /// Request timeout.
     Timeout(String),
 
@@ -175,6 +178,9 @@ impl std::fmt::Display for GatewayError {
             GatewayError::InternalError(msg) => {
                 write!(f, "Internal error: {}", msg)
             }
+            GatewayError::ServiceUnavailable(msg) => {
+                write!(f, "Service unavailable: {}", msg)
+            }
             GatewayError::Timeout(msg) => {
                 write!(f, "Request timeout: {}", msg)
             }
@@ -223,6 +229,7 @@ impl GatewayError {
             GatewayError::MissingProviderKey(_) => "missing_provider_key",
             GatewayError::NetworkError(_) => "network_error",
             GatewayError::InternalError(_) => "internal_error",
+            GatewayError::ServiceUnavailable(_) => "service_unavailable",
             GatewayError::Timeout(_) => "timeout",
             GatewayError::SessionBudgetExceeded { .. } => "session_budget_exceeded",
             GatewayError::GuardrailViolation { .. } => "guardrail_violation",
@@ -267,6 +274,10 @@ impl GatewayError {
             GatewayError::InternalError(_) => (
                 "server_error",
                 "An internal error occurred. Please try again.".to_string(),
+            ),
+            GatewayError::ServiceUnavailable(_) => (
+                "service_unavailable",
+                "A required service is temporarily unavailable. Please try again.".to_string(),
             ),
             GatewayError::Timeout(_) => (
                 "timeout_error",
@@ -375,6 +386,14 @@ impl IntoResponse for GatewayError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "server_error",
                     "An internal error occurred. Please try again.".to_string(),
+                )
+            }
+            GatewayError::ServiceUnavailable(msg) => {
+                tracing::error!("Gateway dependency unavailable: {}", msg);
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "service_unavailable",
+                    "A required service is temporarily unavailable. Please try again.".to_string(),
                 )
             }
             GatewayError::Timeout(msg) => {
@@ -679,6 +698,22 @@ mod tests {
         let err = GatewayError::PaymentRequired;
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::PAYMENT_REQUIRED);
+    }
+
+    #[tokio::test]
+    async fn test_service_unavailable_is_retryable_without_internal_details() {
+        let err = GatewayError::ServiceUnavailable(
+            "Redis pool failed while reserving session evaluation".to_string(),
+        );
+        assert_eq!(err.error_type_str(), "service_unavailable");
+
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let (_, body) = response.into_parts();
+        let bytes = axum::body::to_bytes(body, 4096).await.unwrap();
+        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body_str.contains("temporarily unavailable"));
+        assert!(!body_str.to_lowercase().contains("redis"));
     }
 
     #[tokio::test]

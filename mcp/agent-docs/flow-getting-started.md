@@ -65,7 +65,7 @@ POST https://reiver.ai/api/gateway/v1/sessions/{session_id}/end
 Authorization: Bearer <REIVER_FLOW_API_KEY>
 ```
 
-The endpoint is idempotent and returns `202` when evaluation is scheduled or already queued.
+The endpoint is idempotent and returns `202` when evaluation is scheduled or already queued. Retry a `503 service_unavailable` response because scheduling was not confirmed.
 
 ## Platform management through MCP
 

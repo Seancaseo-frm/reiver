@@ -88,7 +88,18 @@ impl JsonRpcResponse {
 async fn resolve_auth(
     state: &McpHttpState,
     headers: &HeaderMap,
-) -> Result<(Uuid, String, Vec<String>, String, String, Option<Uuid>, Option<Uuid>), (StatusCode, String)> {
+) -> Result<
+    (
+        Uuid,
+        String,
+        Vec<String>,
+        String,
+        String,
+        Option<Uuid>,
+        Option<Uuid>,
+    ),
+    (StatusCode, String),
+> {
     // Trusted proxy path
     if let Some(pid) = headers
         .get("X-Project-Id")
@@ -113,7 +124,15 @@ async fn resolve_auth(
             .and_then(|v| v.to_str().ok())
             .and_then(|s| Uuid::parse_str(s).ok());
 
-        return Ok((pid, api_key, scopes, String::new(), String::new(), None, org_id));
+        return Ok((
+            pid,
+            api_key,
+            scopes,
+            String::new(),
+            String::new(),
+            None,
+            org_id,
+        ));
     }
 
     // Direct connection — validate API key against website

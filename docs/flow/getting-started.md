@@ -140,7 +140,7 @@ curl --request POST \
   --header "Authorization: Bearer $REIVER_FLOW_API_KEY"
 ```
 
-The idempotent endpoint returns `202` when evaluation is scheduled or already queued.
+The idempotent endpoint returns `202` when evaluation is scheduled or already queued. Retry a `503 service_unavailable` response because it means scheduling was not confirmed.
 
 ## Managed prompts
 

@@ -430,13 +430,13 @@ async fn run_sso_worker_mode(
     Ok(())
 }
 
-async fn security_headers(
-    request: axum::extract::Request,
-    next: Next,
-) -> axum::response::Response {
+async fn security_headers(request: axum::extract::Request, next: Next) -> axum::response::Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     headers.insert(
         "strict-transport-security",

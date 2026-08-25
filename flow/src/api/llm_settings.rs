@@ -980,10 +980,7 @@ async fn list_model_pricing(State(state): State<Arc<FlowState>>) -> Json<Pricing
             let models: Vec<PricingModelEntry> = entries
                 .iter()
                 .map(|e| {
-                    let stats = stats_map.get(&(
-                        e.provider_slug.clone(),
-                        e.gateway_model_id(),
-                    ));
+                    let stats = stats_map.get(&(e.provider_slug.clone(), e.gateway_model_id()));
 
                     PricingModelEntry {
                         id: e.gateway_model_id(),

@@ -459,10 +459,22 @@ mod tests {
 
     #[test]
     fn from_model_prefix_known() {
-        assert_eq!(Provider::from_model_prefix("gpt-4o"), Some(Provider::OpenAi));
-        assert_eq!(Provider::from_model_prefix("claude-sonnet-4-6"), Some(Provider::Anthropic));
-        assert_eq!(Provider::from_model_prefix("gemini-2.5-flash"), Some(Provider::Google));
-        assert_eq!(Provider::from_model_prefix("deepseek/deepseek-chat"), Some(Provider::DeepSeek));
+        assert_eq!(
+            Provider::from_model_prefix("gpt-4o"),
+            Some(Provider::OpenAi)
+        );
+        assert_eq!(
+            Provider::from_model_prefix("claude-sonnet-4-6"),
+            Some(Provider::Anthropic)
+        );
+        assert_eq!(
+            Provider::from_model_prefix("gemini-2.5-flash"),
+            Some(Provider::Google)
+        );
+        assert_eq!(
+            Provider::from_model_prefix("deepseek/deepseek-chat"),
+            Some(Provider::DeepSeek)
+        );
     }
 
     #[test]
@@ -491,8 +503,14 @@ mod tests {
 
     #[test]
     fn from_model_prefix_dashed_o_variants() {
-        assert_eq!(Provider::from_model_prefix("o1-mini"), Some(Provider::OpenAi));
-        assert_eq!(Provider::from_model_prefix("o3-mini"), Some(Provider::OpenAi));
+        assert_eq!(
+            Provider::from_model_prefix("o1-mini"),
+            Some(Provider::OpenAi)
+        );
+        assert_eq!(
+            Provider::from_model_prefix("o3-mini"),
+            Some(Provider::OpenAi)
+        );
     }
 
     // Multi-provider model endpoint registry
@@ -577,10 +595,22 @@ mod tests {
     #[test]
     fn provider_serde_tricky_variants() {
         assert_eq!(serde_json::to_value(Provider::Xai).unwrap(), "x-ai");
-        assert_eq!(serde_json::to_value(Provider::AzureOpenAi).unwrap(), "azure-openai");
-        assert_eq!(serde_json::to_value(Provider::VertexAi).unwrap(), "vertex-ai");
-        assert_eq!(serde_json::to_value(Provider::ThetaDedicated).unwrap(), "theta-dedicated");
+        assert_eq!(
+            serde_json::to_value(Provider::AzureOpenAi).unwrap(),
+            "azure-openai"
+        );
+        assert_eq!(
+            serde_json::to_value(Provider::VertexAi).unwrap(),
+            "vertex-ai"
+        );
+        assert_eq!(
+            serde_json::to_value(Provider::ThetaDedicated).unwrap(),
+            "theta-dedicated"
+        );
         assert_eq!(serde_json::to_value(Provider::Alibaba).unwrap(), "qwen");
-        assert_eq!(serde_json::to_value(Provider::Mistral).unwrap(), "mistralai");
+        assert_eq!(
+            serde_json::to_value(Provider::Mistral).unwrap(),
+            "mistralai"
+        );
     }
 }

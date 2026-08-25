@@ -189,6 +189,8 @@ Or if the session was already enqueued for evaluation:
 
 Both cases return `202`. The caller does not need to distinguish between them. `202` confirms scheduling, not completed evaluation; normally the evaluation runs approximately 30 seconds after the call. Verify that the session becomes queryable, and see the [Session and Identity Contract](/flow/session-telemetry) for restart recovery behaviour.
 
+If Reiver cannot reserve the evaluation because its scheduler dependency is unavailable, the endpoint returns `503 service_unavailable` instead of a false `202`. Retry the end call; do not treat the session as scheduled until the endpoint returns `202`.
+
 #### Example
 
 ```bash

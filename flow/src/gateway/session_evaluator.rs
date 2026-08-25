@@ -39,15 +39,27 @@ pub enum EnqueueResult {
     Enqueued,
     /// Session already has a dedup key (no-op).
     AlreadyEnqueued,
-    /// Kafka send failed; dedup entry was rolled back.
+    /// Redis was unavailable, or Kafka send failed and the dedup entry was rolled back.
     Failed,
+}
+
+/// Result of atomically reserving a session's evaluation slot in Redis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReservationResult {
+    /// The reservation was created by this request.
+    Reserved,
+    /// Another request already reserved or enqueued this session.
+    AlreadyReserved,
+    /// Redis could not confirm either outcome.
+    Unavailable,
 }
 
 /// Enqueue a single session for evaluation via Kafka, with Redis dedup.
 ///
 /// Returns [`EnqueueResult::Enqueued`] on success,
 /// [`EnqueueResult::AlreadyEnqueued`] if the session is already in-flight,
-/// or [`EnqueueResult::Failed`] if the Kafka send fails (dedup rolled back).
+/// or [`EnqueueResult::Failed`] if Redis is unavailable or the Kafka send
+/// fails (dedup rolled back).
 ///
 /// Shared by the idle-poll producer and the explicit `/end` endpoint.
 pub async fn enqueue_session_eval(
@@ -58,8 +70,10 @@ pub async fn enqueue_session_eval(
 ) -> EnqueueResult {
     let dedup_key = dedup_key(project_id, session_id);
 
-    if !try_mark_enqueued(redis, &dedup_key, REDIS_DEDUP_TTL_SECS).await {
-        return EnqueueResult::AlreadyEnqueued;
+    match try_mark_enqueued(redis, &dedup_key, REDIS_DEDUP_TTL_SECS).await {
+        ReservationResult::Reserved => {}
+        ReservationResult::AlreadyReserved => return EnqueueResult::AlreadyEnqueued,
+        ReservationResult::Unavailable => return EnqueueResult::Failed,
     }
 
     let message = SessionEvalJobKafkaMessage {
@@ -83,7 +97,11 @@ pub async fn enqueue_session_eval(
 /// Try to mark a session as enqueued without sending to Kafka.
 /// Used by the `/end` endpoint to reserve the dedup slot before
 /// spawning the delayed Kafka send.
-pub async fn try_reserve_session(redis: &RedisPool, project_id: &str, session_id: &str) -> bool {
+pub async fn try_reserve_session(
+    redis: &RedisPool,
+    project_id: &str,
+    session_id: &str,
+) -> ReservationResult {
     let dedup_key = dedup_key(project_id, session_id);
     try_mark_enqueued(redis, &dedup_key, REDIS_RESERVATION_TTL_SECS).await
 }
@@ -234,12 +252,16 @@ async fn undo_mark_enqueued(redis: &RedisPool, key: &str) {
         .await;
 }
 
-/// Atomically create a per-session dedup key. Returns `true` if it was newly
-/// created, or `false` if that session is already reserved/enqueued or Redis
-/// is unavailable. Each session expires independently.
-async fn try_mark_enqueued(redis: &RedisPool, key: &str, ttl_secs: i64) -> bool {
-    let Ok(mut conn) = redis.get().await else {
-        return false;
+/// Atomically create a per-session dedup key. Distinguishes a genuine
+/// duplicate from Redis failure so callers never report a false success.
+/// Each session expires independently.
+async fn try_mark_enqueued(redis: &RedisPool, key: &str, ttl_secs: i64) -> ReservationResult {
+    let mut conn = match redis.get().await {
+        Ok(conn) => conn,
+        Err(e) => {
+            tracing::error!(error = %e, %key, "Failed to acquire Redis connection for session eval reservation");
+            return ReservationResult::Unavailable;
+        }
     };
     let result = redis::cmd("SET")
         .arg(key)
@@ -249,7 +271,18 @@ async fn try_mark_enqueued(redis: &RedisPool, key: &str, ttl_secs: i64) -> bool 
         .arg(ttl_secs)
         .query_async::<Option<String>>(&mut *conn)
         .await;
-    matches!(result, Ok(Some(_)))
+    if let Err(e) = &result {
+        tracing::error!(error = %e, %key, "Failed to reserve session evaluation in Redis");
+    }
+    classify_reservation_result(&result)
+}
+
+fn classify_reservation_result<T, E>(result: &Result<Option<T>, E>) -> ReservationResult {
+    match result {
+        Ok(Some(_)) => ReservationResult::Reserved,
+        Ok(None) => ReservationResult::AlreadyReserved,
+        Err(_) => ReservationResult::Unavailable,
+    }
 }
 
 #[cfg(test)]
@@ -259,10 +292,29 @@ mod tests {
     #[test]
     fn enqueue_result_equality() {
         assert_eq!(EnqueueResult::Enqueued, EnqueueResult::Enqueued);
-        assert_eq!(EnqueueResult::AlreadyEnqueued, EnqueueResult::AlreadyEnqueued);
+        assert_eq!(
+            EnqueueResult::AlreadyEnqueued,
+            EnqueueResult::AlreadyEnqueued
+        );
         assert_eq!(EnqueueResult::Failed, EnqueueResult::Failed);
         assert_ne!(EnqueueResult::Enqueued, EnqueueResult::AlreadyEnqueued);
         assert_ne!(EnqueueResult::Enqueued, EnqueueResult::Failed);
+    }
+
+    #[test]
+    fn redis_result_distinguishes_duplicate_from_unavailable() {
+        assert_eq!(
+            classify_reservation_result(&Ok::<Option<&str>, ()>(Some("OK"))),
+            ReservationResult::Reserved
+        );
+        assert_eq!(
+            classify_reservation_result(&Ok::<Option<&str>, ()>(None)),
+            ReservationResult::AlreadyReserved
+        );
+        assert_eq!(
+            classify_reservation_result(&Err::<Option<&str>, _>(())),
+            ReservationResult::Unavailable,
+        );
     }
 
     #[test]

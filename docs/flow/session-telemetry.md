@@ -66,7 +66,7 @@ curl --request POST \
   --header "Authorization: Bearer $REIVER_FLOW_API_KEY"
 ```
 
-The endpoint is idempotent. It returns `202` and schedules evaluation after an approximately 30-second ingestion buffer; `202` confirms that scheduling, not that evaluation has completed. Reiver also discovers sessions after 30 minutes without a request. Treat that idle evaluator as protection for crashes, disconnects, and abandoned sessions—not as the application's primary definition of success or completion.
+The endpoint is idempotent. It returns `202` and schedules evaluation after an approximately 30-second ingestion buffer; `202` confirms that scheduling, not that evaluation has completed. If the scheduler dependency is unavailable, the endpoint returns `503 service_unavailable`; retry the call because scheduling was not confirmed. Reiver also discovers sessions after 30 minutes without a request. Treat that idle evaluator as protection for crashes, disconnects, and abandoned sessions—not as the application's primary definition of success or completion.
 
 Restart recovery: the explicit-end path holds a short per-session reservation before its 30-second delay. If Flow restarts in that window, the immediate enqueue is lost, but the reservation expires well before the 30-minute idle threshold so idle discovery can enqueue the session normally. Always verify that an ended session becomes queryable before treating the integration as accepted.
 

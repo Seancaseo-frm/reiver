@@ -95,11 +95,11 @@ pub fn create_gateway_router() -> Router<Arc<FlowState>> {
 
 /// POST /v1/sessions/{session_id}/end — Mark a session as ended.
 ///
-/// Reserves a dedup slot immediately and returns 202. A background task
-/// waits 30 seconds (for ClickHouse buffer flush), then sends the Kafka
-/// evaluation job. If the pod restarts during the delay, the 30-minute
-/// idle poll discovers the session after the short per-session reservation
-/// has expired, so the fallback can enqueue it safely.
+/// Reserves a dedup slot immediately and returns 202 when that reservation is
+/// confirmed. A background task waits 30 seconds (for ClickHouse buffer flush),
+/// then sends the Kafka evaluation job. If the pod restarts during the delay,
+/// the 30-minute idle poll discovers the session after the short per-session
+/// reservation has expired, so the fallback can enqueue it safely.
 async fn end_session(
     State(state): State<Arc<FlowState>>,
     headers: HeaderMap,
@@ -117,19 +117,26 @@ async fn end_session(
 
     let pid = project_id.to_string();
 
-    let reserved = crate::gateway::session_evaluator::try_reserve_session(
-        &state.redis, &pid, &session_id,
-    )
-    .await;
+    let reservation =
+        crate::gateway::session_evaluator::try_reserve_session(&state.redis, &pid, &session_id)
+            .await;
 
-    if !reserved {
-        return Ok((
-            axum::http::StatusCode::ACCEPTED,
-            Json(serde_json::json!({
-                "session_id": session_id,
-                "status": "already_enqueued"
-            })),
-        ));
+    match reservation {
+        crate::gateway::session_evaluator::ReservationResult::Reserved => {}
+        crate::gateway::session_evaluator::ReservationResult::AlreadyReserved => {
+            return Ok((
+                axum::http::StatusCode::ACCEPTED,
+                Json(serde_json::json!({
+                    "session_id": session_id,
+                    "status": "already_enqueued"
+                })),
+            ));
+        }
+        crate::gateway::session_evaluator::ReservationResult::Unavailable => {
+            return Err(GatewayError::ServiceUnavailable(
+                "Session evaluation scheduling is temporarily unavailable".to_string(),
+            ));
+        }
     }
 
     let kafka = state.kafka.clone();
@@ -466,7 +473,9 @@ async fn chat_completions_inner(
     let input_pii_detected = mask_request_pii(&state, project_id, &mut request).await;
 
     if !settings.guardrail_config.is_noop() {
-        use crate::gateway::guardrails::{check_input_guardrails, report_input_guardrail_violation};
+        use crate::gateway::guardrails::{
+            check_input_guardrails, report_input_guardrail_violation,
+        };
         if let Some(violation) =
             check_input_guardrails(&settings.guardrail_config, &request, input_pii_detected)
         {
@@ -513,7 +522,8 @@ async fn chat_completions_inner(
     .await?;
 
     let org_id = state.get_organization_id(billing_pid).await.unwrap_or(None);
-    ctx.check_billing_gates(&state, org_id, is_platform_key).await?;
+    ctx.check_billing_gates(&state, org_id, is_platform_key)
+        .await?;
 
     let mut is_streaming = request.stream.unwrap_or(false);
 
@@ -935,12 +945,9 @@ fn emit_project_cache_hit(
     labels.insert("gen_ai.provider.name".into(), provider.to_string());
     labels.insert("gen_ai.request.model".into(), model.to_string());
 
-    state.otel_publisher.emit_counter(
-        project_id,
-        "gen_ai.client.cache.hit",
-        1.0,
-        labels.clone(),
-    );
+    state
+        .otel_publisher
+        .emit_counter(project_id, "gen_ai.client.cache.hit", 1.0, labels.clone());
 
     labels.insert("gen_ai.operation.name".into(), "chat".into());
     state.otel_publisher.emit_histogram(
@@ -1140,12 +1147,9 @@ fn emit_project_request_otel(
             };
             let mut err_labels = labels.clone();
             err_labels.insert("error.type".into(), error_type.into());
-            state.otel_publisher.emit_counter(
-                project_id,
-                "gen_ai.client.error",
-                1.0,
-                err_labels,
-            );
+            state
+                .otel_publisher
+                .emit_counter(project_id, "gen_ai.client.error", 1.0, err_labels);
 
             span_attrs.insert("error.type".into(), error_type.into());
             span_attrs.insert("error.message".into(), e.to_string());
@@ -1351,8 +1355,12 @@ mod tests {
 
     #[test]
     fn test_fallback_result_success() {
-        let fallback_result =
-            FallbackResult::primary("response".to_string(), "gpt-4o".to_string(), Provider::OpenAi, 0);
+        let fallback_result = FallbackResult::primary(
+            "response".to_string(),
+            "gpt-4o".to_string(),
+            Provider::OpenAi,
+            0,
+        );
 
         assert!(!fallback_result.fallback_used);
         assert_eq!(fallback_result.retry_count, 0);

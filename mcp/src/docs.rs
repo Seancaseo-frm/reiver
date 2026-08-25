@@ -125,12 +125,23 @@ mod tests {
 
     #[test]
     fn onboarding_is_first_and_all_resource_uris_are_unique() {
-        assert_eq!(ALL_DOCS.first().map(|doc| doc.uri), Some("agent://onboarding"));
+        assert_eq!(
+            ALL_DOCS.first().map(|doc| doc.uri),
+            Some("agent://onboarding")
+        );
 
         let mut uris = HashSet::new();
         for doc in ALL_DOCS {
-            assert!(uris.insert(doc.uri), "duplicate MCP resource URI: {}", doc.uri);
-            assert!(!doc.content.trim().is_empty(), "empty MCP resource: {}", doc.uri);
+            assert!(
+                uris.insert(doc.uri),
+                "duplicate MCP resource URI: {}",
+                doc.uri
+            );
+            assert!(
+                !doc.content.trim().is_empty(),
+                "empty MCP resource: {}",
+                doc.uri
+            );
         }
     }
 

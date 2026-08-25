@@ -867,9 +867,7 @@ async fn test_connection(
             )
             .await
         }
-        "x-ai" => {
-            test_openai_compat_connection(&api_key, "https://api.x.ai/v1/models").await
-        }
+        "x-ai" => test_openai_compat_connection(&api_key, "https://api.x.ai/v1/models").await,
         "mistralai" => {
             test_openai_compat_connection(&api_key, "https://api.mistral.ai/v1/models").await
         }
@@ -894,11 +892,8 @@ async fn test_connection(
                 .await
         }
         "fireworks" => {
-            test_openai_compat_connection(
-                &api_key,
-                "https://api.fireworks.ai/inference/v1/models",
-            )
-            .await
+            test_openai_compat_connection(&api_key, "https://api.fireworks.ai/inference/v1/models")
+                .await
         }
         "groq" => {
             test_openai_compat_connection(&api_key, "https://api.groq.com/openai/v1/models").await
