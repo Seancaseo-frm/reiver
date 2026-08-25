@@ -59,7 +59,9 @@ pub struct UsersResponse {
 #[derive(Debug, clickhouse::Row, Deserialize)]
 struct UserRow {
     user_id: String,
+    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
     first_seen: DateTime<Utc>,
+    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
     last_seen: DateTime<Utc>,
     session_count: u64,
     request_count: u64,
@@ -162,7 +164,9 @@ pub struct UserDetail {
 struct SessionRow {
     session_id: String,
     session_name: String,
+    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
     first_seen: DateTime<Utc>,
+    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
     last_seen: DateTime<Utc>,
     request_count: u64,
     cost: f64,
@@ -172,7 +176,9 @@ struct SessionRow {
 
 #[derive(Debug, clickhouse::Row, Deserialize)]
 struct AggregateRow {
+    #[serde(with = "clickhouse::serde::chrono::datetime")]
     first_seen: DateTime<Utc>,
+    #[serde(with = "clickhouse::serde::chrono::datetime")]
     last_seen: DateTime<Utc>,
     request_count: u64,
     total_cost: f64,
@@ -374,6 +380,127 @@ async fn load_user_profiles(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    const FIRST_NANOS: i64 = 1_704_164_645_123_456_789;
+    const LAST_NANOS: i64 = 1_704_251_106_987_654_321;
+
+    fn expected_first() -> DateTime<Utc> {
+        DateTime::from_timestamp(1_704_164_645, 123_456_789).unwrap()
+    }
+
+    fn expected_last() -> DateTime<Utc> {
+        DateTime::from_timestamp(1_704_251_106, 987_654_321).unwrap()
+    }
+
+    #[test]
+    fn users_list_deserializes_datetime64_timestamps_and_serializes_iso() {
+        let row: UserRow = serde_json::from_value(json!({
+            "user_id": "user-1",
+            "first_seen": FIRST_NANOS,
+            "last_seen": LAST_NANOS,
+            "session_count": 2,
+            "request_count": 3,
+            "total_cost": 0.25,
+            "error_count": 1,
+            "models": ["model-1"]
+        }))
+        .unwrap();
+
+        assert_eq!(row.first_seen, expected_first());
+        assert_eq!(row.last_seen, expected_last());
+
+        let summary = UserSummary {
+            user_id: row.user_id,
+            first_seen: row.first_seen,
+            last_seen: row.last_seen,
+            session_count: row.session_count,
+            request_count: row.request_count,
+            total_cost: Decimal::from_f64_retain(row.total_cost).unwrap(),
+            error_count: row.error_count,
+            error_rate: rate(row.error_count, row.request_count),
+            models: row.models,
+            matched_profiles: Vec::new(),
+        };
+        let output = serde_json::to_value(summary).unwrap();
+        assert_eq!(output["first_seen"], "2024-01-02T03:04:05.123456789Z");
+        assert_eq!(output["last_seen"], "2024-01-03T03:05:06.987654321Z");
+    }
+
+    #[test]
+    fn user_detail_deserializes_session_datetime64_timestamps_and_serializes_iso() {
+        let row: SessionRow = serde_json::from_value(json!({
+            "session_id": "session-1",
+            "session_name": "Session 1",
+            "first_seen": FIRST_NANOS,
+            "last_seen": LAST_NANOS,
+            "request_count": 3,
+            "cost": 0.25,
+            "error_count": 1,
+            "models": ["model-1"]
+        }))
+        .unwrap();
+
+        assert_eq!(row.first_seen, expected_first());
+        assert_eq!(row.last_seen, expected_last());
+
+        let session = UserSession {
+            session_id: row.session_id,
+            session_name: row.session_name,
+            first_session_timestamp: row.first_seen,
+            last_session_timestamp: row.last_seen,
+            request_count: row.request_count,
+            cost: Decimal::from_f64_retain(row.cost).unwrap(),
+            error_count: row.error_count,
+            models: row.models,
+            labels: Vec::new(),
+            matched_profiles: Vec::new(),
+            has_saved_content: false,
+            saved_session_path: None,
+        };
+        let output = serde_json::to_value(session).unwrap();
+        assert_eq!(
+            output["first_session_timestamp"],
+            "2024-01-02T03:04:05.123456789Z"
+        );
+        assert_eq!(
+            output["last_session_timestamp"],
+            "2024-01-03T03:05:06.987654321Z"
+        );
+    }
+
+    #[test]
+    fn user_detail_deserializes_daily_aggregate_datetime_timestamps() {
+        let row: AggregateRow = serde_json::from_value(json!({
+            "first_seen": 1_704_153_600,
+            "last_seen": 1_704_326_399,
+            "request_count": 3,
+            "total_cost": 0.25,
+            "error_count": 1,
+            "models": ["model-1"]
+        }))
+        .unwrap();
+
+        assert_eq!(row.first_seen.to_rfc3339(), "2024-01-02T00:00:00+00:00");
+        assert_eq!(row.last_seen.to_rfc3339(), "2024-01-03T23:59:59+00:00");
+
+        let detail = UserDetail {
+            user_id: "user-1".into(),
+            first_seen: row.first_seen,
+            last_seen: row.last_seen,
+            session_count: 0,
+            request_count: row.request_count,
+            total_cost: Decimal::from_f64_retain(row.total_cost).unwrap(),
+            error_count: row.error_count,
+            error_rate: rate(row.error_count, row.request_count),
+            models: row.models,
+            sessions: Vec::new(),
+            retention_notice: "test",
+        };
+        let output = serde_json::to_value(detail).unwrap();
+        assert_eq!(output["first_seen"], "2024-01-02T00:00:00Z");
+        assert_eq!(output["last_seen"], "2024-01-03T23:59:59Z");
+    }
     #[test]
     fn query_is_project_scoped_and_excludes_blank() {
         let id = Uuid::nil();
