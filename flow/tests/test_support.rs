@@ -25,9 +25,9 @@ use reiver_flow::config::{Config, TotpAlgorithm};
 use reiver_flow::gateway::cache::GatewayCache;
 use reiver_flow::gateway::fallback::FallbackConfig;
 use reiver_flow::gateway::latency_tracker::LatencyTracker;
+use reiver_flow::gateway::prompt_store::PgPromptStore;
 use reiver_flow::gateway::provider_manager::{GatewayTimeouts, ProviderConfig, ProviderManager};
 use reiver_flow::gateway::GatewayRouter;
-use reiver_flow::gateway::prompt_store::PgPromptStore;
 use reiver_flow::{api, clickhouse_db, crypto, kafka, llm, trusted_proxy};
 
 /// No-op embedder for gateway tests that don't exercise knowledge base search.
@@ -57,11 +57,23 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn new() -> Self {
-        Self::new_with_prompt_store(None).await
+        Self::new_with_options(None, None).await
     }
 
     pub async fn new_with_prompt_store(
         prompt_store: Option<Arc<dyn reiver_flow::gateway::prompt_store::PromptWriteStore>>,
+    ) -> Self {
+        Self::new_with_options(prompt_store, None).await
+    }
+
+    /// Start the app with a test-controlled Redis endpoint.
+    pub async fn new_with_redis_url(redis_url: String) -> Self {
+        Self::new_with_options(None, Some(redis_url)).await
+    }
+
+    async fn new_with_options(
+        prompt_store: Option<Arc<dyn reiver_flow::gateway::prompt_store::PromptWriteStore>>,
+        redis_url: Option<String>,
     ) -> Self {
         let openai_mock = MockServer::start().await;
         let anthropic_mock = MockServer::start().await;
@@ -72,6 +84,7 @@ impl TestApp {
             anthropic_mock.uri(),
             google_mock.uri(),
             prompt_store,
+            redis_url,
         )
         .await;
 
@@ -100,6 +113,14 @@ impl TestApp {
     /// URL for `POST /api/gateway/v1/chat/completions`.
     pub fn chat_completions_url(&self) -> String {
         format!("{}/api/gateway/v1/chat/completions", self.base_url)
+    }
+
+    /// URL for `POST /api/gateway/v1/sessions/{session_id}/end`.
+    pub fn end_session_url(&self, session_id: &str) -> String {
+        format!(
+            "{}/api/gateway/v1/sessions/{}/end",
+            self.base_url, session_id
+        )
     }
 
     pub fn client(&self) -> reqwest::Client {
@@ -175,12 +196,16 @@ async fn build_test_state(
     anthropic_url: String,
     google_url: String,
     custom_prompt_store: Option<Arc<dyn reiver_flow::gateway::prompt_store::PromptWriteStore>>,
+    redis_url: Option<String>,
 ) -> Arc<FlowState> {
-    let config = test_config(
+    let mut config = test_config(
         Some(openai_url.clone()),
         Some(anthropic_url.clone()),
         Some(google_url.clone()),
     );
+    if let Some(redis_url) = redis_url {
+        config.redis_url = redis_url;
+    }
     let config_arc = Arc::new(config);
 
     // PgPool::connect_lazy never opens a network connection during construction.
@@ -234,7 +259,8 @@ async fn build_test_state(
     // Generate a temporary encryption key (not persisted between test runs).
     let temp_key = crypto::SecretEncryptor::generate_key();
     let encryptor = Arc::new(
-        crypto::RotatingSecretEncryptor::single_key(&temp_key).expect("generated key must be valid"),
+        crypto::RotatingSecretEncryptor::single_key(&temp_key)
+            .expect("generated key must be valid"),
     );
 
     // Cost calculator uses the DB only for price lookups, which never fire
@@ -270,9 +296,7 @@ async fn build_test_state(
             HashMap::new(),
         )
         .with_latency_tracker(latency_tracker.clone())
-        .with_model_catalog_cache(
-            (*model_catalog_cache).clone(),
-        ),
+        .with_model_catalog_cache((*model_catalog_cache).clone()),
     );
 
     let gateway_router = Arc::new(

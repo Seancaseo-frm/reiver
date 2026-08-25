@@ -10,6 +10,11 @@ mod test_support;
 use test_support::{test_project_id, test_user_id, TestApp};
 
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::task::JoinHandle;
 use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -66,6 +71,130 @@ fn google_chat_response(content: &str) -> Value {
     })
 }
 
+#[derive(Clone, Copy)]
+enum TestRedisMode {
+    ReserveOnce,
+    Unavailable,
+}
+
+/// Minimal RESP2 server for exercising session-end reservation outcomes through
+/// the real HTTP route. It intentionally implements only the Redis commands
+/// emitted while opening the pooled connection and reserving the session.
+struct TestRedisServer {
+    url: String,
+    task: JoinHandle<()>,
+}
+
+impl TestRedisServer {
+    async fn start(mode: TestRedisMode) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind test Redis listener");
+        let addr = listener
+            .local_addr()
+            .expect("failed to read test Redis address");
+        let reservations = Arc::new(AtomicUsize::new(0));
+
+        let task = tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                let reservations = reservations.clone();
+                tokio::spawn(serve_test_redis_connection(stream, mode, reservations));
+            }
+        });
+
+        Self {
+            url: format!("redis://{}", addr),
+            task,
+        }
+    }
+}
+
+impl Drop for TestRedisServer {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+async fn serve_test_redis_connection(
+    mut stream: TcpStream,
+    mode: TestRedisMode,
+    reservations: Arc<AtomicUsize>,
+) {
+    let mut pending = Vec::new();
+    let mut chunk = [0u8; 4096];
+
+    loop {
+        let bytes_read = match stream.read(&mut chunk).await {
+            Ok(0) | Err(_) => return,
+            Ok(bytes_read) => bytes_read,
+        };
+        pending.extend_from_slice(&chunk[..bytes_read]);
+
+        while let Some((command, consumed)) = parse_resp_command(&pending) {
+            pending.drain(..consumed);
+            let name = command.first().map(Vec::as_slice).unwrap_or_default();
+            let response: &[u8] = if name.eq_ignore_ascii_case(b"PING") {
+                b"+PONG\r\n"
+            } else if name.eq_ignore_ascii_case(b"SET") {
+                match mode {
+                    TestRedisMode::ReserveOnce => {
+                        if reservations.fetch_add(1, Ordering::SeqCst) == 0 {
+                            b"+OK\r\n"
+                        } else {
+                            b"$-1\r\n"
+                        }
+                    }
+                    TestRedisMode::Unavailable => b"-ERR simulated Redis outage\r\n",
+                }
+            } else {
+                // CLIENT SETINFO is sent twice when redis-rs opens a connection.
+                b"+OK\r\n"
+            };
+
+            if stream.write_all(response).await.is_err() {
+                return;
+            }
+        }
+    }
+}
+
+fn parse_resp_command(input: &[u8]) -> Option<(Vec<Vec<u8>>, usize)> {
+    if input.first() != Some(&b'*') {
+        return None;
+    }
+
+    let (argument_count, mut cursor) = parse_resp_number(input, 1)?;
+    let mut arguments = Vec::with_capacity(argument_count);
+
+    for _ in 0..argument_count {
+        if input.get(cursor) != Some(&b'$') {
+            return None;
+        }
+        let (argument_length, argument_start) = parse_resp_number(input, cursor + 1)?;
+        let argument_end = argument_start.checked_add(argument_length)?;
+        if input.get(argument_end..argument_end + 2)? != b"\r\n" {
+            return None;
+        }
+        arguments.push(input.get(argument_start..argument_end)?.to_vec());
+        cursor = argument_end + 2;
+    }
+
+    Some((arguments, cursor))
+}
+
+fn parse_resp_number(input: &[u8], start: usize) -> Option<(usize, usize)> {
+    let line_end = input
+        .get(start..)?
+        .windows(2)
+        .position(|window| window == b"\r\n")?
+        + start;
+    let number = std::str::from_utf8(input.get(start..line_end)?)
+        .ok()?
+        .parse()
+        .ok()?;
+    Some((number, line_end + 2))
+}
+
 /// Build an OpenAI-format SSE stream with N text chunks followed by `[DONE]`.
 fn openai_sse_body(model: &str, chunks: &[&str]) -> String {
     let mut body = String::new();
@@ -106,6 +235,67 @@ fn openai_sse_body(model: &str, chunks: &[&str]) -> String {
 // ──────────────────────────────────────────────────────────────────────────────
 // Auth / input validation
 // ──────────────────────────────────────────────────────────────────────────────
+
+/// The public session-end route must report whether Redis accepted the
+/// reservation, had already accepted it, or could not confirm either outcome.
+#[tokio::test]
+async fn test_end_session_returns_truthful_reservation_outcomes() {
+    let redis = TestRedisServer::start(TestRedisMode::ReserveOnce).await;
+    let app = TestApp::new_with_redis_url(redis.url.clone()).await;
+    let session_id = "session-end-response-matrix";
+
+    let first = app
+        .client()
+        .post(app.end_session_url(session_id))
+        .header("X-Project-Id", test_project_id().to_string())
+        .send()
+        .await
+        .expect("first session-end request failed");
+    assert_eq!(first.status(), 202);
+    assert_eq!(
+        first.json::<Value>().await.unwrap(),
+        json!({
+            "session_id": session_id,
+            "status": "evaluation_scheduled"
+        })
+    );
+
+    let duplicate = app
+        .client()
+        .post(app.end_session_url(session_id))
+        .header("X-Project-Id", test_project_id().to_string())
+        .send()
+        .await
+        .expect("duplicate session-end request failed");
+    assert_eq!(duplicate.status(), 202);
+    assert_eq!(
+        duplicate.json::<Value>().await.unwrap(),
+        json!({
+            "session_id": session_id,
+            "status": "already_enqueued"
+        })
+    );
+
+    let unavailable_redis = TestRedisServer::start(TestRedisMode::Unavailable).await;
+    let unavailable_app = TestApp::new_with_redis_url(unavailable_redis.url.clone()).await;
+    let unavailable = unavailable_app
+        .client()
+        .post(unavailable_app.end_session_url("session-end-redis-unavailable"))
+        .header("X-Project-Id", test_project_id().to_string())
+        .send()
+        .await
+        .expect("unavailable session-end request failed");
+    assert_eq!(unavailable.status(), 503);
+    assert_eq!(
+        unavailable.json::<Value>().await.unwrap(),
+        json!({
+            "error": {
+                "message": "A required service is temporarily unavailable. Please try again.",
+                "type": "service_unavailable"
+            }
+        })
+    );
+}
 
 /// A request without the `X-Project-Id` header must be rejected before any
 /// provider call is attempted.
