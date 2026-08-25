@@ -119,7 +119,7 @@ impl Provider {
     pub fn description(&self) -> &'static str {
         match self {
             Self::OpenAi => "GPT-4o, o1, o3 reasoning models",
-            Self::Anthropic => "Claude Sonnet 4.6, Claude Opus 4.6 with extended thinking",
+            Self::Anthropic => "Claude Sonnet 5, Opus 5, Fable 5, and earlier supported models",
             Self::Google => "Gemini 2.5 Flash, Gemini 2.5 Pro",
             Self::Bedrock => "Claude, Llama, Mistral, and other models via AWS",
             Self::Theta => "Llama, Qwen, GPT OSS, MiniMax via Theta EdgeCloud on-demand",

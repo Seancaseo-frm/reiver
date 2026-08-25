@@ -11,6 +11,8 @@ export default defineConfig({
     'DESIGN.md',
     'FEATURE_DESIGN_DOC.md',
     'GAME_SEMANTIC_CONVENTIONS.md',
+    'KEY_ROTATION.md',
+    'PRODUCTION_READINESS_LAUNCH.md',
     'invariants.md',
     'roadmap.md',
     'investor-conversation-learnings.md',
@@ -20,10 +22,11 @@ export default defineConfig({
     'exception-*.md',
     'pitch-deck.html',
     'data_sources/**',
+    'internal/**',
   ],
 
   head: [
-    ['link', { rel: 'icon', href: '/favicon.ico' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
   ],
 
   themeConfig: {
@@ -31,6 +34,7 @@ export default defineConfig({
     siteTitle: 'Reiver Docs',
 
     nav: [
+      { text: 'Quickstart', link: '/quickstart' },
       { text: 'Flow', link: '/flow/getting-started' },
       { text: 'Watch', link: '/watch/' },
       // Pond disabled — re-enable when Pond launches
@@ -49,7 +53,7 @@ export default defineConfig({
             { text: 'Prompt Management', link: '/flow/prompt-management' },
             { text: 'Features', link: '/flow/features' },
             { text: 'Routing', link: '/flow/routing' },
-            { text: 'Session Telemetry', link: '/flow/session-telemetry' },
+            { text: 'Session & Identity Contract', link: '/flow/session-telemetry' },
             { text: 'Supported Models', link: '/flow/models' },
             { text: 'API Reference', link: '/flow/api-reference' },
             { text: 'Management API', link: '/flow/management-api' },

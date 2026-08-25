@@ -1,6 +1,6 @@
-# Reiver
+# Reiver documentation
 
-> OpenAI-compatible LLM gateway, prompt management, OpenTelemetry observability, and MCP-based platform operations.
+> Reiver is an OpenAI-compatible LLM gateway, prompt-management system, and OpenTelemetry observability platform with MCP-based management.
 
 ## Start here
 
@@ -8,11 +8,10 @@
 - Flow + Prompt Hub: https://docs.reiver.ai/flow/getting-started
 - Watch: https://docs.reiver.ai/watch/
 - Complete Reiver: https://docs.reiver.ai/quickstart
-- Machine-readable integration contract: https://reiver.ai/llms-full.txt
+- Complete machine-readable guide: https://docs.reiver.ai/llms-full.txt
 - Shared Session and Identity Contract: https://docs.reiver.ai/flow/session-telemetry
 - MCP setup: https://docs.reiver.ai/agent/mcp-setup
-- MCP endpoint: https://reiver.ai/mcp
-- First MCP resource: agent://onboarding
+- MCP resources: connect to https://reiver.ai/mcp and read agent://onboarding
 
 ## Credential contract
 

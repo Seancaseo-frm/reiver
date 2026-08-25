@@ -487,7 +487,11 @@ const getLlmThinking = (span) => {
 
 const getLlmSessionId = (span) => {
   const attrs = span.attributes || {}
-  return attrs['gen_ai.session_id'] || attrs['llm.session_id'] || null
+  return attrs['gen_ai.conversation.id']
+    || attrs['gen_ai.session.id']
+    || attrs['gen_ai.session_id']
+    || attrs['llm.session_id']
+    || null
 }
 
 const getLlmPromptId = (span) => {
@@ -587,5 +591,4 @@ onMounted(async () => {
   @apply bg-white text-gray-900 shadow-sm;
 }
 </style>
-
 

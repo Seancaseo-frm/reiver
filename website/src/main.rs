@@ -465,6 +465,11 @@ async fn security_headers(
     response
 }
 
+fn spa_static_service(frontend_dir: impl AsRef<std::path::Path>) -> ServeDir<ServeFile> {
+    let frontend_dir = frontend_dir.as_ref();
+    ServeDir::new(frontend_dir).fallback(ServeFile::new(frontend_dir.join("index.html")))
+}
+
 async fn run_api_server(
     state: Arc<app_state::WebsiteState>,
     config: &Config,
@@ -794,7 +799,11 @@ async fn run_api_server(
     let frontend_dir =
         std::env::var("FRONTEND_DIR").unwrap_or_else(|_| "./frontend-dist".to_string());
     let index_html = format!("{}/index.html", frontend_dir);
-    let spa_fallback = ServeDir::new(&frontend_dir).not_found_service(ServeFile::new(&index_html));
+    // A client-side route is a valid SPA entry point, not a missing page. Using
+    // `not_found_service` served index.html with a 404 status, which broke direct
+    // links, crawlers, and coding agents even though the browser rendered the UI.
+    // `fallback` preserves ServeFile's 200 response for valid SPA entry points.
+    let spa_fallback = spa_static_service(&frontend_dir);
 
     let app = Router::new()
         // .merge(pond_proxy) // Pond disabled — re-enable when Pond launches
@@ -836,4 +845,28 @@ async fn run_api_server(
     .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{body::Body, http::Request};
+    use tower::Service;
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn spa_fallback_returns_index_with_success_status() {
+        let frontend_dir = std::env::temp_dir().join(format!("reiver-spa-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&frontend_dir).unwrap();
+        std::fs::write(frontend_dir.join("index.html"), "<html>quickstart</html>").unwrap();
+
+        let mut service = super::spa_static_service(&frontend_dir);
+        let request = Request::builder()
+            .uri("/quickstart")
+            .body(Body::empty())
+            .unwrap();
+        let response = service.call(request).await.unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        std::fs::remove_dir_all(frontend_dir).unwrap();
+    }
 }

@@ -970,30 +970,30 @@ async fn test_openai_connection(api_key: &str) -> Result<()> {
 /// Test Anthropic connection
 async fn test_anthropic_connection(api_key: &str) -> Result<()> {
     let client = reqwest::Client::new();
-    // Anthropic doesn't have a simple models endpoint, so we make a minimal chat request
+    // Authentication check only. Model inference is proved separately by the
+    // explicit Flow/Playground smoke test in onboarding.
     let response = client
-        .post("https://api.anthropic.com/v1/messages")
+        .get("https://api.anthropic.com/v1/models?limit=1")
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&serde_json::json!({
-            "model": "claude-haiku-4-5-20251001",
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "test"}]
-        }))
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
         .map_err(|e| AppError::External(format!("Connection failed: {}", e)))?;
 
-    // 200 means success, 401 means invalid key
-    if response.status().is_success() || response.status().as_u16() == 400 {
-        // 400 can mean valid key but bad request format - still means key works
+    if response.status().is_success() {
         Ok(())
     } else if response.status().as_u16() == 401 {
         Err(AppError::BadRequest("Invalid API key".to_string()))
+    } else if response.status().as_u16() == 403 {
+        Err(AppError::BadRequest(
+            "Anthropic API key does not have permission to list models".to_string(),
+        ))
     } else {
-        Err(AppError::BadRequest("Connection failed".to_string()))
+        Err(AppError::BadRequest(format!(
+            "Anthropic authentication test failed (HTTP {})",
+            response.status().as_u16()
+        )))
     }
 }
 

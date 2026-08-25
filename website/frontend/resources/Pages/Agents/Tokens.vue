@@ -126,7 +126,7 @@ async function createToken() {
     const { data } = await axios.post(`/api/projects/${projectId.value}/keys`, {
       key_type: 'agent',
       label: newLabel.value || undefined,
-      scopes: ['project:read', 'llm:read', 'alerts:read', 'dashboards:read'],
+      scopes: ['project:read', 'llm:read', 'observability:read'],
     });
     createdKey.value = data.key || data.token || JSON.stringify(data);
     newLabel.value = '';

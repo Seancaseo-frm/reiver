@@ -19,7 +19,7 @@ use crate::gateway::types::{
     find_system_message_text, non_system_messages, AssistantMessage, ChatCompletionChunk,
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, ChunkChoice, ChunkDelta,
     FunctionCall, MessageContent, MessageRole, PromptTokensDetails, ThinkingContent, ThinkingType,
-    ToolCall, ToolType, Usage,
+    ThinkingConfig, ThinkingToggle, ToolCall, ToolType, Usage,
 };
 
 const ANTHROPIC_API_BASE: &str = "https://api.anthropic.com/v1";
@@ -27,6 +27,8 @@ const ANTHROPIC_API_BASE: &str = "https://api.anthropic.com/v1";
 /// See: https://docs.anthropic.com/en/api/versioning
 const DEFAULT_ANTHROPIC_VERSION: &str = "2023-06-01";
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
+const INTERLEAVED_THINKING_BETA: &str = "interleaved-thinking-2025-01-05";
+const FAST_MODE_BETA: &str = "fast-mode-2026-02-01";
 
 /// Anthropic provider adapter.
 pub struct AnthropicProvider {
@@ -458,33 +460,30 @@ impl LlmProvider for AnthropicProvider {
         api_key: &str,
     ) -> Result<ChatCompletionResponse, GatewayError> {
         let url = format!("{}/messages", self.api_base);
-
-        let thinking = request.thinking.as_ref().and_then(|t| {
-            if t.thinking_type == crate::gateway::types::ThinkingToggle::Enabled {
-                Some(AnthropicThinkingConfig {
-                    thinking_type: "enabled".to_string(),
-                    budget_tokens: t.budget_tokens.unwrap_or(10000),
-                })
-            } else {
-                None
-            }
-        });
+        let options = AnthropicRequestOptions::for_model(&request.model);
+        let thinking = anthropic_thinking_config(&request.model, request.thinking.as_ref());
+        let (temperature, top_p) = anthropic_sampling_parameters(
+            &request.model,
+            request.temperature,
+            request.top_p,
+        );
 
         let tools = self.convert_tools(&request.tools);
 
         let anthropic_request = AnthropicRequest {
-            model: AnthropicModelId::from(request.model.as_str()),
+            model: options.model,
             messages: self.convert_messages(&request.messages),
             system: find_system_message_text(&request.messages),
             max_tokens: request.max_tokens.unwrap_or(4096),
-            temperature: request.temperature,
-            top_p: request.top_p,
+            temperature,
+            top_p,
             stop_sequences: request.stop.as_ref().map(|s| match s {
                 crate::gateway::types::StopSequence::Single(s) => vec![s.clone()],
                 crate::gateway::types::StopSequence::Multiple(v) => v.clone(),
             }),
             stream: None,
             thinking,
+            speed: options.speed,
             tools,
         };
 
@@ -495,8 +494,14 @@ impl LlmProvider for AnthropicProvider {
             .header("anthropic-version", &self.api_version)
             .header("Content-Type", "application/json");
 
-        if anthropic_request.thinking.is_some() {
-            req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-01-05");
+        if anthropic_request.speed.is_some() {
+            req_builder = req_builder.header("anthropic-beta", FAST_MODE_BETA);
+        } else if anthropic_request
+            .thinking
+            .as_ref()
+            .is_some_and(|config| config.thinking_type == "enabled")
+        {
+            req_builder = req_builder.header("anthropic-beta", INTERLEAVED_THINKING_BETA);
         }
 
         let response = req_builder.json(&anthropic_request).send().await?;
@@ -560,32 +565,29 @@ impl LlmProvider for AnthropicProvider {
         api_key: &str,
     ) -> Result<ChatCompletionStream, GatewayError> {
         let url = format!("{}/messages", self.api_base);
-
-        let thinking = request.thinking.as_ref().and_then(|t| {
-            if t.thinking_type == crate::gateway::types::ThinkingToggle::Enabled {
-                Some(AnthropicThinkingConfig {
-                    thinking_type: "enabled".to_string(),
-                    budget_tokens: t.budget_tokens.unwrap_or(10000),
-                })
-            } else {
-                None
-            }
-        });
+        let options = AnthropicRequestOptions::for_model(&request.model);
+        let thinking = anthropic_thinking_config(&request.model, request.thinking.as_ref());
+        let (temperature, top_p) = anthropic_sampling_parameters(
+            &request.model,
+            request.temperature,
+            request.top_p,
+        );
         let tools = self.convert_tools(&request.tools);
 
         let anthropic_request = AnthropicRequest {
-            model: AnthropicModelId::from(request.model.as_str()),
+            model: options.model,
             messages: self.convert_messages(&request.messages),
             system: find_system_message_text(&request.messages),
             max_tokens: request.max_tokens.unwrap_or(4096),
-            temperature: request.temperature,
-            top_p: request.top_p,
+            temperature,
+            top_p,
             stop_sequences: request.stop.as_ref().map(|s| match s {
                 crate::gateway::types::StopSequence::Single(s) => vec![s.clone()],
                 crate::gateway::types::StopSequence::Multiple(v) => v.clone(),
             }),
             stream: Some(true),
             thinking,
+            speed: options.speed,
             tools,
         };
 
@@ -597,9 +599,14 @@ impl LlmProvider for AnthropicProvider {
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream");
 
-        // Extended thinking requires the interleaved-thinking beta header (Claude 3.7+)
-        if anthropic_request.thinking.is_some() {
-            req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-01-05");
+        if anthropic_request.speed.is_some() {
+            req_builder = req_builder.header("anthropic-beta", FAST_MODE_BETA);
+        } else if anthropic_request
+            .thinking
+            .as_ref()
+            .is_some_and(|config| config.thinking_type == "enabled")
+        {
+            req_builder = req_builder.header("anthropic-beta", INTERLEAVED_THINKING_BETA);
         }
 
         let response = req_builder.json(&anthropic_request).send().await?;
@@ -819,6 +826,120 @@ impl LlmProvider for AnthropicProvider {
 
 // Anthropic-specific request/response types
 
+/// Models that reject non-default sampling controls and manage sampling on the
+/// provider side. Keep this centralized: the Playground, managed prompts, and
+/// direct API requests can all otherwise inject a temperature that turns a
+/// valid Anthropic request into HTTP 400.
+pub(crate) fn uses_provider_managed_sampling(model: &str) -> bool {
+    let normalized = model.replace('.', "-");
+    [
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-mythos-5",
+    ]
+    .iter()
+    .any(|family| model_is_in_family(&normalized, family))
+}
+
+fn model_is_in_family(model: &str, family: &str) -> bool {
+    model == family
+        || model
+            .strip_prefix(family)
+            .is_some_and(|suffix| suffix.starts_with('-') || suffix.starts_with(':'))
+}
+
+fn uses_adaptive_thinking(model: &str) -> bool {
+    let normalized = model.replace('.', "-");
+    ["claude-opus-4-7", "claude-opus-4-8", "claude-opus-5"]
+        .iter()
+        .any(|family| model_is_in_family(&normalized, family))
+}
+
+fn has_default_adaptive_thinking(model: &str) -> bool {
+    let normalized = model.replace('.', "-");
+    ["claude-sonnet-5", "claude-fable-5", "claude-mythos-5"]
+        .iter()
+        .any(|family| model_is_in_family(&normalized, family))
+}
+
+fn anthropic_sampling_parameters(
+    model: &str,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+) -> (Option<f32>, Option<f32>) {
+    if uses_provider_managed_sampling(model) {
+        if temperature.is_some() || top_p.is_some() {
+            tracing::debug!(
+                model,
+                "Omitting sampling parameters unsupported by this Anthropic model"
+            );
+        }
+        (None, None)
+    } else {
+        (temperature, top_p)
+    }
+}
+
+fn anthropic_thinking_config(
+    model: &str,
+    thinking: Option<&ThinkingConfig>,
+) -> Option<AnthropicThinkingConfig> {
+    let requested = thinking.filter(|config| config.thinking_type == ThinkingToggle::Enabled)?;
+
+    // Sonnet 5 and Fable/Mythos 5 already run adaptive thinking and reject the
+    // legacy `enabled + budget_tokens` shape exposed by the OpenAI-compatible
+    // Reiver request. Omitting the field preserves their provider default.
+    if has_default_adaptive_thinking(model) {
+        tracing::debug!(model, "Using Anthropic's default adaptive thinking");
+        return None;
+    }
+
+    // Recent Opus models accept adaptive thinking but reject manual extended
+    // thinking. Translate Reiver's legacy toggle instead of forwarding an
+    // invalid token budget.
+    if uses_adaptive_thinking(model) {
+        return Some(AnthropicThinkingConfig {
+            thinking_type: "adaptive".to_string(),
+            budget_tokens: None,
+        });
+    }
+
+    Some(AnthropicThinkingConfig {
+        thinking_type: "enabled".to_string(),
+        budget_tokens: Some(requested.budget_tokens.unwrap_or(10_000)),
+    })
+}
+
+#[derive(Debug)]
+struct AnthropicRequestOptions {
+    model: AnthropicModelId,
+    speed: Option<String>,
+}
+
+impl AnthropicRequestOptions {
+    fn for_model(model: &str) -> Self {
+        let normalized = model.replace('.', "-");
+        let fast_base = normalized.strip_suffix("-fast").filter(|base| {
+            model_is_in_family(base, "claude-opus-4-8")
+                || model_is_in_family(base, "claude-opus-5")
+        });
+
+        match fast_base {
+            Some(base) => Self {
+                model: AnthropicModelId(base.to_string()),
+                speed: Some("fast".to_string()),
+            },
+            None => Self {
+                model: AnthropicModelId(normalized),
+                speed: None,
+            },
+        }
+    }
+}
+
 /// Newtype that normalizes OpenRouter-style dot-versioned model IDs
 /// (e.g. `claude-opus-4.8`) to Anthropic's native dash format (`claude-opus-4-8`).
 #[derive(Debug, Clone)]
@@ -864,6 +985,10 @@ struct AnthropicRequest {
     /// Extended thinking configuration (for Claude 3.7+)
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<AnthropicThinkingConfig>,
+    /// Anthropic fast mode (research preview). OpenRouter exposes this as a
+    /// `-fast` model alias; Anthropic's native API expects a request field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speed: Option<String>,
     /// Tool definitions for function calling.
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicToolDefinition>>,
@@ -873,8 +998,9 @@ struct AnthropicRequest {
 #[derive(Debug, Serialize)]
 struct AnthropicThinkingConfig {
     #[serde(rename = "type")]
-    thinking_type: String, // "enabled"
-    budget_tokens: u32,
+    thinking_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    budget_tokens: Option<u32>,
 }
 
 /// Anthropic tool definition for function calling.
@@ -1124,6 +1250,66 @@ mod tests {
         let id = AnthropicModelId::from("claude-opus-4.8");
         let json = serde_json::to_string(&id).unwrap();
         assert_eq!(json, "\"claude-opus-4-8\"");
+    }
+
+    #[test]
+    fn test_provider_managed_sampling_model_families() {
+        assert!(uses_provider_managed_sampling("claude-sonnet-5"));
+        assert!(uses_provider_managed_sampling("claude-opus-5-fast"));
+        assert!(uses_provider_managed_sampling("claude-opus-4.8"));
+        assert!(uses_provider_managed_sampling(
+            "claude-fable-5-20260609"
+        ));
+        assert!(!uses_provider_managed_sampling("claude-sonnet-4-6"));
+        assert!(!uses_provider_managed_sampling(
+            "claude-haiku-4-5-20251001"
+        ));
+    }
+
+    #[test]
+    fn test_sampling_parameters_are_omitted_for_managed_models() {
+        assert_eq!(
+            anthropic_sampling_parameters("claude-sonnet-5", Some(0.7), Some(0.9)),
+            (None, None)
+        );
+        assert_eq!(
+            anthropic_sampling_parameters("claude-sonnet-4-6", Some(0.7), Some(0.9)),
+            (Some(0.7), Some(0.9))
+        );
+    }
+
+    #[test]
+    fn test_fast_alias_maps_to_native_anthropic_request() {
+        let options = AnthropicRequestOptions::for_model("claude-opus-4.8-fast");
+        assert_eq!(options.model.0, "claude-opus-4-8");
+        assert_eq!(options.speed.as_deref(), Some("fast"));
+
+        let options = AnthropicRequestOptions::for_model("claude-opus-5-fast");
+        assert_eq!(options.model.0, "claude-opus-5");
+        assert_eq!(options.speed.as_deref(), Some("fast"));
+
+        let unsupported = AnthropicRequestOptions::for_model("claude-opus-4.7-fast");
+        assert_eq!(unsupported.model.0, "claude-opus-4-7-fast");
+        assert!(unsupported.speed.is_none());
+    }
+
+    #[test]
+    fn test_thinking_config_tracks_anthropic_model_generation() {
+        let requested = ThinkingConfig {
+            thinking_type: ThinkingToggle::Enabled,
+            budget_tokens: Some(8_000),
+        };
+
+        assert!(anthropic_thinking_config("claude-sonnet-5", Some(&requested)).is_none());
+
+        let opus = anthropic_thinking_config("claude-opus-4.8", Some(&requested)).unwrap();
+        assert_eq!(opus.thinking_type, "adaptive");
+        assert!(opus.budget_tokens.is_none());
+
+        let legacy =
+            anthropic_thinking_config("claude-sonnet-4-6", Some(&requested)).unwrap();
+        assert_eq!(legacy.thinking_type, "enabled");
+        assert_eq!(legacy.budget_tokens, Some(8_000));
     }
 
     #[test]
@@ -1612,6 +1798,7 @@ mod tests {
             stop_sequences: None,
             stream: None,
             thinking: None,
+            speed: None,
             tools: Some(converted),
         };
 

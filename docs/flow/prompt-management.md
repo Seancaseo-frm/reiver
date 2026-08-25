@@ -67,8 +67,21 @@ Once you're confident in a new prompt version, create a rollout on the config to
 When a managed prompt is resolved (i.e. the request includes a `prompt_config`):
 
 - If your request **has no system message**, a new one is created with the managed prompt.
-- If your request **already has a system message**, the managed prompt is **skipped** — your messages are preserved exactly as sent. This prevents double-injection in multi-turn agent loops that re-send `prompt_config` for model/temperature settings but already carry the system prompt in context.
+- If your request **already has a system message**, only managed system-prompt injection is **skipped** — your messages are preserved exactly as sent. The version's other settings can still apply.
 - All other messages (user, assistant, tool) are never modified.
+
+### Override precedence
+
+| Setting | What wins when `prompt_config` is present |
+|---|---|
+| System message | The managed prompt is injected only when the request has no system message |
+| Model | A non-empty model on the prompt version overrides the application's explicit model or the result of `model: "auto"`; leave the version model unset to preserve the caller's selection |
+| Temperature | The prompt version's temperature overrides the request value, subject to provider capability; Reiver omits it for Claude families that reject sampling controls |
+| Max tokens | A positive prompt-version value overrides the request value; otherwise the request value remains |
+| Tools | Request tools remain; version tools fill in only when the request has none, then `allowed_tools` filters the result |
+| Response format | The request value remains; the version value fills in only when the request has none |
+
+This is why the verified onboarding baseline does not apply a managed prompt: first prove the application's explicit provider/model route, then introduce one override at a time and inspect `x-reiver-model-used`.
 
 ## Rollouts
 
@@ -164,8 +177,8 @@ If a variable fails validation, the request returns a `422` error with details a
 
 ## Summary Table
 
-| Scenario | Managed prompt applied? | Your system prompt |
+| Scenario | Managed system prompt injected? | Your system prompt |
 |----------|-------------------------|--------------------|
 | No `prompt_config` in request | No | Preserved exactly |
 | `prompt_config` present, no system message in request | Yes — injected as system message | N/A |
-| `prompt_config` present, system message already in request | No — skipped to avoid double-injection | Preserved exactly |
+| `prompt_config` present, system message already in request | No — skipped to avoid double-injection; other version settings can still apply | Preserved exactly |

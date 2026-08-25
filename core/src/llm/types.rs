@@ -228,7 +228,7 @@ pub struct LlmRequest {
     pub error_message: String,
 
     /// Session ID for grouping related requests in a conversation.
-    /// From `gen_ai.session.id` attribute.
+    /// From `gen_ai.conversation.id` or the deprecated `gen_ai.session.id` alias.
     pub session_id: String,
 
     /// Human-readable session name/title.

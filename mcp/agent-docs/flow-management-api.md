@@ -3,7 +3,7 @@
 > **REST endpoints on this page are for the user's application backend to call programmatically.**
 > You (the agent) do not call these REST endpoints yourself. When the user asks you to manage Flow resources (prompts, rollouts, integrations, settings), use the **MCP Equivalent** listed under each section. When the user asks you to help build backend code that integrates with the management API, use the REST endpoint documentation to write that code.
 
-All REST endpoints are under `/api/llm/...` and require a project API key.
+All REST endpoints are under `/api/llm/...` and require a Reiver SDK key when called from an application backend. The MCP agent should use the MCP equivalents with its agent token instead of copying that token into REST calls.
 
 ## Sessions
 

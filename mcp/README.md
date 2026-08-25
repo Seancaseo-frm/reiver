@@ -2,16 +2,18 @@
 
 MCP (Model Context Protocol) server that exposes the Reiver platform to AI agents. Supports two transports:
 
-- **stdio** — for local agents (Cursor, Claude Desktop). Authenticates with a project API key at startup.
+- **stdio** — for local agents. Authenticates with an MCP agent token at startup.
 - **HTTP** — for deployment behind the website proxy. Authenticates per-request via trusted `X-Project-Id` headers. No API key needed at startup.
+
+Application-onboarding agents must read `agent://onboarding` first, select the Flow, Watch, or Complete track, and apply only that track's definition of done. Session or cross-product correlation also requires `agent://flow/session-telemetry`.
 
 ## Quick Start
 
 ### stdio (local agent)
 
 ```bash
-# Set your project API key
-export REIVER_API_KEY="your-project-api-key"
+# Set a scoped MCP agent token. Do not use an application SDK key here.
+export REIVER_API_KEY="your-agent-token"
 
 # Run with stdio (default)
 reiver-mcp
@@ -38,10 +40,10 @@ Add the following to your MCP client configuration (e.g., `~/.config/claude/clau
       "command": "/path/to/reiver-mcp",
       "args": ["--transport", "stdio"],
       "env": {
-        "REIVER_API_KEY": "<your-project-api-key>",
-        "WEBSITE_URL": "https://app.reiver.io",
-        "FLOW_URL": "https://flow.reiver.io",
-        "WATCH_URL": "https://watch.reiver.io"
+        "REIVER_API_KEY": "<your-agent-token>",
+        "WEBSITE_URL": "https://reiver.ai",
+        "FLOW_URL": "https://reiver.ai",
+        "WATCH_URL": "https://reiver.ai"
       }
     }
   }
@@ -52,14 +54,14 @@ Add the following to your MCP client configuration (e.g., `~/.config/claude/clau
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REIVER_API_KEY` | — | Project API key (required for **stdio** transport only) |
+| `REIVER_API_KEY` | — | MCP agent token (required for **stdio** transport only) |
 | `WEBSITE_URL` | `http://localhost:80` | Website API base URL |
 | `FLOW_URL` | `http://localhost:3001` | Flow (LLM gateway) API base URL |
 | `WATCH_URL` | `http://localhost:3003` | Watch (APM) API base URL |
 
-## Available Tools (6 facade tools)
+## Available Tools (5 facade tools)
 
-The MCP server exposes **6 high-level tools** that dispatch to over 100 underlying operations. Each tool uses a discriminator field to route to the right action.
+The MCP server exposes **5 high-level tools** that dispatch to the underlying platform operations. Each tool uses a discriminator field to route to the right action.
 
 | Tool | Discriminator | Purpose |
 |------|---------------|---------|
@@ -68,14 +70,13 @@ The MCP server exposes **6 high-level tools** that dispatch to over 100 underlyi
 | `list` | `resource` | Browse/list resources with optional filters (26 resource types) |
 | `analyze` | `analysis` | Metrics, analytics, comparisons, diagnostics (18 analysis types) |
 | `execute` | `resource` + `action` | Create, update, configure, deploy, test, run (14 resources, 39 actions) |
-| `delete` | `resource` | Remove a resource permanently (5 resource types) |
 
 ## Architecture
 
 The MCP server is a thin orchestration layer:
 
 1. **Authentication**:
-   - *stdio*: Validates the project API key against the website on connection, creating a single `ActionContext` for the session.
+   - *stdio*: Validates the MCP agent token against the website on connection, creating a single `ActionContext` for the session.
    - *HTTP*: Reads `X-Project-Id` from each request (set by the website proxy after authenticating the caller). Builds a per-request `ActionContext`. Also accepts direct `Bearer` API key auth for connections that bypass the proxy.
 2. **Action Registry**: Maps MCP tool names to typed `PlatformAction` implementations.
 3. **Internal HTTP Client**: Actions call the existing REST APIs (website, flow, watch) internally.
@@ -109,7 +110,7 @@ docker build -f deploy/docker/Dockerfile.mcp -t reiver-mcp .
 docker run reiver-mcp
 ```
 
-For stdio (local use), pass the API key:
+For stdio (local use), pass the MCP agent token:
 
 ```bash
 docker run -e REIVER_API_KEY=... reiver-mcp ./reiver-mcp --transport stdio

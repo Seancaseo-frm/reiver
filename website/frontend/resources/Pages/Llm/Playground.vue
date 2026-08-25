@@ -35,7 +35,15 @@
             </select>
             <p v-if="isAutoMode" class="mt-1 text-xs text-indigo-600 dark:text-indigo-400">Uses fallback chain</p>
           </div>
-          <div class="flex items-center gap-2">
+          <div v-if="isAutoMode" class="flex items-center gap-2" title="Select an explicit model to control introspection">
+            <span class="text-xs text-gray-500 dark:text-gray-400">Thinking</span>
+            <span class="text-xs font-medium text-gray-600 dark:text-gray-300">model default</span>
+          </div>
+          <div v-else-if="hasDefaultAdaptiveThinking" class="flex items-center gap-2" title="This Claude model manages adaptive thinking itself">
+            <span class="text-xs text-gray-500 dark:text-gray-400">Thinking</span>
+            <span class="text-xs font-medium text-indigo-600 dark:text-indigo-400">adaptive</span>
+          </div>
+          <div v-else class="flex items-center gap-2">
             <span class="text-xs text-gray-500 dark:text-gray-400">Introspection</span>
             <label class="relative inline-flex items-center cursor-pointer">
               <input v-model="introspectionEnabled" type="checkbox" class="sr-only peer" />
@@ -49,13 +57,17 @@
               <div class="w-8 h-4 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:bg-brand-600 after:content-[''] after:absolute after:top-0.5 after:start-0.5 after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4"></div>
             </label>
           </div>
-          <div class="flex items-center gap-2">
+          <div v-if="hasProviderManagedSampling" class="flex items-center gap-2" title="Anthropic rejects non-default temperature and top-p values for this model">
+            <span class="text-xs text-gray-500 dark:text-gray-400">Sampling</span>
+            <span class="text-xs font-medium text-indigo-600 dark:text-indigo-400">provider default</span>
+          </div>
+          <div v-else class="flex items-center gap-2">
             <label class="text-xs text-gray-500 dark:text-gray-400">Temp</label>
             <input
               v-model.number="temperature"
               type="number"
               min="0"
-              max="2"
+              max="1"
               step="0.1"
               class="w-14 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
             />
@@ -492,6 +504,23 @@ const maxTokens = ref(4096);
 const introspectionEnabled = ref(false);
 const autoEvaluate = ref(false);
 const isAutoMode = computed(() => selectedModel.value === 'auto');
+const normalizedSelectedModel = computed(() => selectedModel.value.replaceAll('.', '-'));
+const modelIsInFamily = (model, family) =>
+  model === family || model.startsWith(`${family}-`) || model.startsWith(`${family}:`);
+const hasProviderManagedSampling = computed(() => [
+  'claude-opus-4-7',
+  'claude-opus-4-8',
+  'claude-opus-5',
+  'claude-sonnet-5',
+  'claude-fable-5',
+  'claude-mythos-5',
+].some((family) => modelIsInFamily(normalizedSelectedModel.value, family)));
+const hasDefaultAdaptiveThinking = computed(() => [
+  'claude-opus-5',
+  'claude-sonnet-5',
+  'claude-fable-5',
+  'claude-mythos-5',
+].some((family) => modelIsInFamily(normalizedSelectedModel.value, family)));
 
 // Conversation state
 const systemPrompt = ref('You are a helpful assistant.');
@@ -576,12 +605,15 @@ const sendMessageAuto = async (userMessage) => {
     project_id: projectId.value,
     model: 'auto',
     messages: requestMessages,
-    temperature: temperature.value,
     max_tokens: maxTokens.value,
     use_fallback_chain: true,
     enable_introspection: introspectionEnabled.value,
     auto_evaluate: autoEvaluate.value,
   };
+
+  // Auto may select a provider that accepts sampling controls. The Anthropic
+  // adapter strips unsupported values after the actual model is resolved.
+  body.temperature = temperature.value;
 
   // In managed prompt mode, send prompt_config + variables for server-side resolution
   if (isManagedPromptMode.value) {
@@ -637,12 +669,15 @@ const sendMessageStreaming = async (requestMessages) => {
   const requestBody = {
     model: selectedModel.value,
     messages: requestMessages,
-    temperature: temperature.value,
     max_tokens: maxTokens.value,
     stream: true,
   };
 
-  if (introspectionEnabled.value) {
+  if (!hasProviderManagedSampling.value) {
+    requestBody.temperature = temperature.value;
+  }
+
+  if (introspectionEnabled.value && !hasDefaultAdaptiveThinking.value) {
     if (selectedModel.value.includes('claude')) {
       requestBody.thinking = { type: 'enabled', budget_tokens: 10000 };
     } else if (selectedModel.value.startsWith('o')) {
@@ -881,5 +916,11 @@ onMounted(async () => {
 watch(projectId, () => {
   fetchUser();
   fetchModelCatalog();
+});
+
+watch([isAutoMode, hasDefaultAdaptiveThinking], ([auto, adaptive]) => {
+  if (auto || adaptive) {
+    introspectionEnabled.value = false;
+  }
 });
 </script>

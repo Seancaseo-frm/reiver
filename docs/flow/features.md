@@ -1,6 +1,6 @@
 # Features
 
-Flow provides a suite of features on top of basic LLM routing. All features work across every supported provider.
+Flow provides a suite of features on top of basic LLM routing. Routing, observability and policy controls are provider-independent; model-native capabilities such as sampling, thinking, tools and structured output still depend on the selected provider/model.
 
 ## Routing & Failover
 
@@ -34,6 +34,8 @@ Caching is eligible when:
 - `temperature` is `0`
 - No tools are specified
 - `n` is `1` (or absent)
+
+Models that reject temperature controls, including Claude Sonnet 5, Opus 5, Fable 5 and recent Opus 4.7/4.8 variants, are not cache-eligible on the strength of a requested temperature. Reiver omits the unsupported field, so it cannot make those responses deterministic.
 
 The `x-reiver-cache` response header reports `"hit"`, `"miss"`, or `"skip"`.
 
@@ -94,7 +96,7 @@ Set a per-session cost limit using the `x-reiver-session-id` header and the proj
 
 ```python
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="claude-sonnet-5",
     messages=[{"role": "user", "content": "Hello!"}],
     extra_headers={"x-reiver-session-id": "session-abc-123"}
 )
@@ -132,26 +134,24 @@ When validation fails, the behavior depends on the configured `output_failure_ac
 
 The `x-output-contract-violation` response header is set to `"true"` when a passthrough occurs.
 
-## Extended Thinking / Introspection
+## Thinking / Introspection
 
-Flow supports extended thinking for models that offer it:
+Thinking controls depend on the model generation:
 
-- **Anthropic Claude** — Extended thinking with configurable budget tokens.
+- **Claude 5** — Adaptive thinking is model-controlled. Sonnet 5 and Fable 5 reject the legacy manual token-budget shape, so Reiver preserves their adaptive default.
+- **Recent Claude Opus** — Reiver translates the compatibility toggle to adaptive thinking where supported.
+- **Earlier Claude models** — Extended thinking can use a configurable budget where the provider supports it.
 - **OpenAI o-series** — Reasoning effort levels (`low`, `medium`, `high`).
 - **Google Gemini** — Gemini thinking mode.
 
 ```python
 response = client.chat.completions.create(
-    model="claude-3-5-sonnet",
+    model="claude-sonnet-5",
     messages=[{"role": "user", "content": "Solve this step by step."}],
-    extra_body={
-        "thinking": {
-            "type": "enabled",
-            "budget_tokens": 10000
-        }
-    }
 )
 ```
+
+Do not send `thinking: {"type":"enabled","budget_tokens":...}` to Sonnet 5 or Fable 5. In the Playground they are labelled **adaptive** rather than presenting a manual introspection switch.
 
 ## Multimodal Support
 
@@ -178,18 +178,18 @@ Every request is logged with token usage and cost, broken down by provider. This
 
 ## Session Telemetry (OTel Correlation)
 
-Flow can surface OpenTelemetry spans and logs alongside a session's LLM requests by correlating on a shared session ID attribute. This gives you a unified view of everything that happened during a conversation — the LLM calls, your application's traces, and any logs — without leaving the session detail page.
+Flow sessions and Watch telemetry can be correlated by a shared conversation value. They remain separate stored signals, so the application must emit matching identifiers and the UI or MCP client must query both.
 
 To enable this, tag your OTel spans and logs with one of the following attributes:
 
 | Attribute | Spec |
 |-----------|------|
-| `gen_ai.session_id` | OpenTelemetry GenAI semantic convention (preferred) |
-| `llm.session_id` | Legacy / custom attribute |
+| `gen_ai.conversation.id` | Current OpenTelemetry GenAI convention |
+| `gen_ai.session.id` | Deprecated alias accepted by Reiver during migration |
 
 The attribute value must match the `x-reiver-session-id` you send with your gateway requests.
 
-See the full [Session Telemetry](/flow/session-telemetry) page for integration examples and the API reference.
+Set the OpenAI-compatible `user` request field plus `x-reiver-user-id` for current per-user analytics and sticky routing. See [Session and user telemetry](/flow/session-telemetry) for examples and verification.
 
 ## Observability
 

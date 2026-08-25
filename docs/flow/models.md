@@ -1,105 +1,75 @@
-# Supported Models
+# Models and variants
 
-Flow routes requests to the correct provider based on the model name prefix. You can use any model supported by the provider — the table below lists known models, but any model with a matching prefix will be routed correctly.
+Flow routes a model identifier to a configured provider. The model catalogue changes independently of Reiver deployments, so use the live selector and test the exact model instead of relying on a long static list.
 
-## Providers
+## What each catalogue means
 
-### OpenAI
+| Source | What it proves |
+|---|---|
+| Project model selector | Reiver has routing metadata for a provider configured in this project |
+| [Public model catalogue](https://reiver.ai/model-catalog) | Pricing/routing metadata known to Reiver |
+| Provider connection test | The stored provider credential authenticates |
+| Successful Playground/gateway request | That exact key, model and request path work now |
+| `x-reiver-provider` and `x-reiver-model-used` | Which provider and model actually served the request |
 
-| Model | Identifier |
-|-------|-----------|
-| GPT-4o | `gpt-4o` |
-| GPT-4o Mini | `gpt-4o-mini` |
-| GPT-4 Turbo | `gpt-4-turbo` |
-| GPT-3.5 Turbo | `gpt-3.5-turbo` |
-| o1 | `o1` |
-| o1 Mini | `o1-mini` |
-| o3 | `o3` |
-| o3 Mini | `o3-mini` |
+Catalogue presence does not guarantee that every historical entry remains callable by every account. A provider can retire a model or restrict it by region/tier while pricing metadata remains available.
 
-Any model starting with `gpt-`, `o1`, `o1-`, `o3`, `o3-`, `o4`, `o4-`, `chatgpt-`, `text-embedding-`, `whisper-`, `dall-e-`, or `tts-` routes to OpenAI.
+## Anthropic baseline
 
-### Anthropic
+Current standard Reiver identifiers include:
 
-| Model | Identifier |
-|-------|-----------|
-| Claude Sonnet 4 | `claude-sonnet-4` |
-| Claude Opus 4 | `claude-opus-4` |
-| Claude Haiku 4.5 | `claude-haiku-4-5` |
-| Claude 3.5 Sonnet | `claude-3-5-sonnet` |
-| Claude 3 Opus | `claude-3-opus` |
-| Claude 3.5 Haiku | `claude-3-5-haiku` |
-| Claude 3 Haiku | `claude-3-haiku` |
+| Intended use | Identifier |
+|---|---|
+| Highest capability / long-running agents | `claude-fable-5` |
+| Complex agentic and enterprise work | `claude-opus-5` |
+| Speed/intelligence balance | `claude-sonnet-5` |
+| Lowest-cost current Claude family | Select the current Haiku entry shown for the Anthropic integration |
 
-Any model starting with `claude-` routes to Anthropic. Claude models are also available through [AWS Bedrock](/flow/routing#multi-provider-models).
+For first onboarding, use `claude-sonnet-5` unless the existing application already depends on another current Claude model.
 
-### Google Gemini
+## Standard, Fast and Batch
 
-| Model | Identifier |
-|-------|-----------|
-| Gemini 2.5 Flash | `gemini-2.5-flash` |
-| Gemini 2.5 Pro | `gemini-2.5-pro` |
-| Gemini 2.0 Flash | `gemini-2.0-flash` |
-| Gemini 1.5 Pro | `gemini-1.5-pro` |
-| Gemini 1.5 Flash | `gemini-1.5-flash` |
-| Gemini Pro | `gemini-pro` |
+| Variant | Behaviour | Use it when |
+|---|---|---|
+| Standard, e.g. `claude-opus-5` | Normal synchronous inference | Default for applications and baseline tests |
+| Fast, `claude-opus-5-fast` or `claude-opus-4.8-fast` | Same Opus model with higher output speed and premium pricing | The Anthropic account has fast-mode preview access and latency justifies the price |
+| Batch, e.g. `claude-opus-5:batch` | Asynchronous provider batch pricing/processing | Offline bulk work through a provider batch API, not an interactive Flow completion |
 
-Any model starting with `gemini-` routes to Google.
+Reiver translates the supported `-fast` aliases to Anthropic's native `speed: "fast"` request and beta header. Fast mode is currently restricted to Opus 5 and Opus 4.8 and requires Anthropic access; catalogue presence does not grant that access. Reiver hides unsupported historical fast aliases.
 
-### AWS Bedrock
+Reiver's project settings, prompt and Playground selectors exclude `:batch` entries because those screens issue synchronous Flow requests. Flow does not turn a normal chat-completion request into a provider batch job. The public pricing catalogue can still show batch entries for cost comparison.
 
-Use Bedrock model IDs directly. Flow recognizes these prefixes:
+## Claude sampling and thinking
 
-- `bedrock/` — e.g., `bedrock/anthropic.claude-3-sonnet-20240229-v1:0`
-- `anthropic.` — e.g., `anthropic.claude-3-sonnet-20240229-v1:0`
-- `amazon.` — e.g., `amazon.titan-text-express-v1`
-- `meta.` — e.g., `meta.llama3-1-8b-instruct-v1:0`
-- `mistral.` — e.g., `mistral.mistral-7b-instruct-v0:2`
-- `cohere.` — e.g., `cohere.command-r-plus-v1:0`
-- `ai21.` — e.g., `ai21.jamba-1-5-mini-v1:0`
+Sonnet 5, Opus 5, Fable 5 and recent Opus 4.7/4.8 models reject non-default `temperature`, `top_p` and `top_k` values. Reiver omits those unsupported values at the Anthropic adapter, including temperatures inherited from managed prompt versions. The Playground labels sampling as **provider default** for these models.
 
-### DeepSeek
+Claude 5 uses adaptive thinking. Do not attach the legacy `thinking: {"type":"enabled","budget_tokens":...}` shape to Sonnet 5 or Fable 5. Reiver keeps their adaptive default and translates the legacy toggle to adaptive thinking where recent Opus models support it.
 
-| Model | Identifier |
-|-------|-----------|
-| DeepSeek Chat | `deepseek/deepseek-chat` |
-| DeepSeek Reasoner | `deepseek/deepseek-reasoner` |
+## Provider routing
 
-Any model starting with `deepseek/` routes to DeepSeek. The `deepseek/` prefix is stripped before forwarding to the DeepSeek API.
+Common direct-provider prefixes include:
 
-### Theta EdgeCloud
+- OpenAI: `gpt-`, `o1`–`o4` and related OpenAI identifiers;
+- Anthropic: `claude-`;
+- Google: `gemini-`;
+- provider-qualified gateways such as `deepinfra/...`, `deepseek/...`, `mistral/...`, `together/...` and `theta/...`;
+- AWS Bedrock native or `bedrock/...` identifiers.
 
-Prefix with `theta/`. Aliases use underscores to match Theta's service catalog:
+For a provider-qualified model, copy the exact identifier from the live project selector. Do not infer that a retired specialist model has been silently replaced by the provider's latest general model.
 
-| Model | Identifier |
-|-------|-----------|
-| Llama 3.1 70B | `theta/llama_3_1_70b` |
-| Llama 3 8B | `theta/llama_3_8b` |
-| Qwen3 | `theta/qwen3` |
-| GPT OSS 120B | `theta/gpt_oss_120b` |
-| MiniMax M2.5 | `theta/minimax_m2_5` |
+## Explicit model first, auto later
 
-Any model starting with `theta/` routes to Theta EdgeCloud on-demand. Streaming is supported.
+Start with one explicit model and inspect the response:
 
-## Auto Mode
-
-Set the model to `"auto"` and Flow will select from your project's preferred models list based on availability and latency:
-
-```python
-response = client.chat.completions.create(
-    model="auto",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+```bash
+curl --include https://reiver.ai/api/gateway/v1/chat/completions \
+  --header "Authorization: Bearer $REIVER_FLOW_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"model":"claude-sonnet-5","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-Configure preferred models in your project's gateway settings. If no preference is set, the project's default model is used.
+Only after that works should you configure `model: "auto"`, preferred models or fallback providers. Auto mode selects from project settings; it is not evidence that the originally requested provider/model worked.
 
-## Provider Keys
+## Provider keys
 
-Each provider requires an API key configured in your project settings. If a request targets a provider without a configured key, it returns an error:
-
-```
-API key not configured for provider 'anthropic'
-```
-
-Configure provider keys in the Reiver dashboard under **Project Settings → Gateway → Provider Keys**.
+Provider keys are stored in Reiver under **Prompt Hub → Integrations**. The application sends only its Reiver SDK key. Test provider connectivity after adding or rotating a key, then test the exact model in the Playground.

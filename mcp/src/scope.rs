@@ -1,6 +1,6 @@
 //! Scope constants and helpers for token permissions.
 //!
-//! Seven coarse scopes grouped by product area. A `:write` scope
+//! Coarse scopes grouped by product area. A `:write` scope
 //! implies the corresponding `:read` scope for the same area.
 
 pub const PROJECT_READ: &str = "project:read";

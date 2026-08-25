@@ -300,16 +300,17 @@ Run a single playground prompt.
 ```json
 {
   "project_id": "uuid",
-  "model": "claude-3-5-sonnet",
+  "model": "claude-sonnet-5",
   "messages": [
     { "role": "user", "content": "Explain quantum computing simply." }
   ],
-  "temperature": 0.7,
   "auto_evaluate": true
 }
 ```
 
 Returns the model response, token usage, latency, cost, and optional LLM-as-judge evaluation scores (relevance, coherence, helpfulness).
+
+Claude Sonnet 5 manages sampling at the provider, so its example omits `temperature`. Reiver strips unsupported sampling values if a managed prompt supplies one.
 
 ### POST /compare
 
@@ -319,7 +320,7 @@ Compare the same prompt across multiple models in parallel (max 5, 30s timeout p
 {
   "project_id": "uuid",
   "messages": [{ "role": "user", "content": "Hello!" }],
-  "compare_models": ["gpt-4o", "claude-3-5-sonnet", "gemini-2.0-flash"]
+  "compare_models": ["claude-sonnet-5", "claude-fable-5", "claude-opus-5"]
 }
 ```
 

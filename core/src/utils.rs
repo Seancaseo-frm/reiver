@@ -64,8 +64,33 @@ pub async fn validate_project_key_cached(
     db: &DbPool,
     project_key: &str,
 ) -> Result<Uuid> {
+    validate_project_key_cached_inner(redis, db, project_key, None).await
+}
+
+/// Validate a project key of a specific stored type and return its project.
+///
+/// Typed validation uses a separate cache namespace so a generic key lookup
+/// cannot make an agent token valid at an SDK-only application endpoint.
+pub async fn validate_project_key_type_cached(
+    redis: &RedisPool,
+    db: &DbPool,
+    project_key: &str,
+    expected_key_type: &str,
+) -> Result<Uuid> {
+    validate_project_key_cached_inner(redis, db, project_key, Some(expected_key_type)).await
+}
+
+async fn validate_project_key_cached_inner(
+    redis: &RedisPool,
+    db: &DbPool,
+    project_key: &str,
+    expected_key_type: Option<&str>,
+) -> Result<Uuid> {
     let key_hash = hash_api_key(project_key);
-    let cache_key = format!("project_key:{}", key_hash);
+    let cache_key = match expected_key_type {
+        Some(key_type) => format!("project_key:{}:{}", key_type, key_hash),
+        None => format!("project_key:{}", key_hash),
+    };
 
     // Try cache first
     let mut conn = redis.get().await.map_err(|e| {
@@ -101,9 +126,13 @@ pub async fn validate_project_key_cached(
     debug!("Project key cache miss, querying database");
 
     let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM project_keys WHERE key_hash = $1 AND (expires_at IS NULL OR expires_at > NOW())"
+        "SELECT project_id FROM project_keys
+         WHERE key_hash = $1
+           AND ($2::text IS NULL OR key_type = $2)
+           AND (expires_at IS NULL OR expires_at > NOW())",
     )
     .bind(&key_hash)
+    .bind(expected_key_type)
     .fetch_optional(db)
     .await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Database error: {}", e)))?;
@@ -136,17 +165,21 @@ pub async fn validate_project_key_cached(
 
 /// Invalidate the cache for a project key by its hash (call when keys are deleted/rotated)
 pub async fn invalidate_project_key_cache(redis: &RedisPool, key_hash: &str) -> Result<()> {
-    let cache_key = format!("project_key:{}", key_hash);
-
     let mut conn = redis
         .get()
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Redis error: {}", e)))?;
 
-    let _: () = conn
-        .del(&cache_key)
-        .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Redis error: {}", e)))?;
+    for cache_key in [
+        format!("project_key:{}", key_hash),
+        format!("project_key:sdk:{}", key_hash),
+        format!("project_key:agent:{}", key_hash),
+    ] {
+        let _: () = conn
+            .del(&cache_key)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Redis error: {}", e)))?;
+    }
 
     Ok(())
 }

@@ -1,12 +1,12 @@
 # AI Agent
 
-Reiver exposes its full platform to AI agents through the **Model Context Protocol (MCP)**. Agents can manage projects, configure prompts, query APM data, build dashboards, set up alerts, and check billing — all through 6 high-level tools that cover over 100 operations.
+Reiver exposes its platform to AI agents through the **Model Context Protocol (MCP)**. Agents can read an onboarding contract, configure prompts, query APM data, build dashboards, set up alerts, and check billing through 5 focused facade tools.
 
 There are two ways to use it:
 
 ## External Agents (MCP)
 
-Connect AI agents like **Claude Desktop**, **Cursor**, **OpenClaw**, or any MCP-compatible client to Reiver. The MCP server is hosted at `reiver.ai/mcp` and uses Streamable HTTP transport — no local binary required. Authenticate with an **agent token** (created in project settings) and your agent can start making tool calls immediately.
+Connect AI agents like **Claude Code**, **Cursor**, **Codex**, or any MCP-compatible client to Reiver. The MCP server is hosted at `reiver.ai/mcp` and uses Streamable HTTP transport—no local binary required. Authenticate with an **agent token** created under **Agents → Tokens**.
 
 This is useful for:
 
@@ -15,7 +15,7 @@ This is useful for:
 - Managing prompt versions and rollouts without the UI
 - Integrating Reiver into agentic workflows and pipelines
 
-See [MCP Setup](/agent/mcp-setup) to get started, and [Available Tools](/agent/tools) for the full reference.
+See [Choose your Reiver path](/quickstart) for Flow, Watch, or Complete application onboarding, [MCP Setup](/agent/mcp-setup) to connect a client, and [Available Tools](/agent/tools) for the full reference.
 
 ## In-App Agent
 
@@ -23,7 +23,7 @@ Reiver also includes a built-in AI assistant in the web UI. It appears as a resi
 
 To use it:
 
-1. Configure at least one AI vendor integration (OpenAI, Anthropic, etc.) in your project's LLM settings
+1. Configure at least one AI vendor integration (OpenAI, Anthropic, etc.) under **Prompt Hub → Integrations**
 2. Select a model for the agent (or use "auto" mode)
 3. Open the agent panel from the UI
 

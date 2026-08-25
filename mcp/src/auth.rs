@@ -23,7 +23,7 @@ struct ValidateKeyResponse {
     created_by: Option<Uuid>,
 }
 
-/// Validates a project API key against the website's `/api/auth/validate-key`
+/// Validates an MCP agent token against the website's `/api/auth/validate-key`
 /// endpoint and builds an [`ActionContext`] with the resolved `project_id`
 /// and `key_id`.
 pub async fn authenticate(

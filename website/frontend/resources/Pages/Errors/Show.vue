@@ -372,7 +372,11 @@ const llmContext = computed(() => {
   return {
     provider: attrs['gen_ai.system'] || attrs['llm.provider'] || detectProvider(message),
     model: attrs['gen_ai.request.model'] || attrs['llm.model'] || 'Unknown',
-    session_id: attrs['gen_ai.session_id'] || attrs['llm.session_id'] || null,
+    session_id: attrs['gen_ai.conversation.id']
+      || attrs['gen_ai.session.id']
+      || attrs['gen_ai.session_id']
+      || attrs['llm.session_id']
+      || null,
     prompt_id: attrs['gen_ai.prompt_id'] || attrs['llm.prompt_id'] || null,
     cost: parseFloat(attrs['gen_ai.usage.cost'] || attrs['llm.cost'] || 0),
     error_type: attrs['gen_ai.error_type'] || attrs['llm.error_type'] || extractErrorType(message),

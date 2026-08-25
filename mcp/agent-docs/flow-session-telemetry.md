@@ -1,85 +1,81 @@
-# Flow — Session Telemetry
+# Flow — Session and Identity Contract
 
-Session Telemetry correlates OpenTelemetry spans and logs with LLM sessions, providing a unified view of gateway requests, application traces, and structured logs in one place.
+Decide what a session and user mean before adding correlation fields. A Reiver session is the smallest meaningful business episode the owner wants to evaluate, label, budget, replay, and improve.
 
-## How It Works
+## Required decision
 
-1. Applications send LLM requests through the Flow gateway with `x-reiver-session-id` to group them into a session.
-2. Application code annotates OTel spans and logs with the same session ID using `gen_ai.session_id` or `llm.session_id`.
-3. Reiver queries ClickHouse for all spans and logs matching the session ID and displays them in the session detail page.
+Infer the contract from `gateway_settings.agent_soul` and the application, then present it in **My understanding** and ask only about material gaps or conflicts:
 
-Sessions appear approximately 30 minutes after the session ends due to ingestion and processing pipelines.
-
-## Application Integration
-
-### Tagging spans
-
-#### Python (OpenTelemetry)
-
-```python
-from opentelemetry import trace
-
-tracer = trace.get_tracer(__name__)
-session_id = "sess-42"
-
-with tracer.start_as_current_span("process_user_message") as span:
-    span.set_attribute("gen_ai.session_id", session_id)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        extra_headers={"x-reiver-session-id": session_id},
-    )
+```text
+Session and Identity Contract
+- Session unit:
+- Starts when:
+- Ends successfully when:
+- Also ends when:
+- Idle fallback:
+- Stable user ID source:
+- Anonymous-user policy:
+- Tenant scoping:
 ```
 
-#### Node.js (OpenTelemetry)
+When authorised, merge the confirmed block into the existing Agent Soul through `gateway update_settings`, normally in `custom_instructions`; preserve useful existing context. Later coding-agent sessions and MCP tokens should read and reuse `gateway_settings.agent_soul` rather than asking the owner again.
 
-```javascript
-const { trace } = require('@opentelemetry/api');
+Useful defaults:
 
-const tracer = trace.getTracer('my-app');
-const sessionId = 'sess-42';
+- maths tutor: one problem, exercise, or coherent learning episode;
+- sales: one lead conversation;
+- support: one issue or ticket;
+- copilot: one user task;
+- processor: one job;
+- multi-agent system: one business case or workflow.
 
-tracer.startActiveSpan('process_user_message', (span) => {
-  span.setAttribute('gen_ai.session_id', sessionId);
-  span.end();
-});
-```
+Do not use a long-lived user/account ID as the session ID. Do not create a new session per LLM turn unless one turn is genuinely the outcome being evaluated.
 
-#### Rust (tracing + opentelemetry)
+## Lifecycle behaviour
 
-```rust
-use tracing::Span;
+There is no separate Reiver session-start call. The first accepted Flow request with a new `x-reiver-session-id` becomes the session's first recorded activity. Create or select the ID at the application's real start event, normally by reusing a conversation/task/job ID or creating an opaque backend ID.
 
-let session_id = "sess-42";
-let span = tracing::info_span!("process_user_message",
-    gen_ai.session_id = session_id,
-);
-let _guard = span.enter();
-```
+Call `POST /api/gateway/v1/sessions/{session_id}/end` at a real terminal event. The call is idempotent, returns `202`, and schedules evaluation after an approximately 30-second ingestion buffer. Reiver's 30-minute idle evaluator remains a crash/abandonment fallback; it is not the primary business definition of completion.
 
-### Tagging logs
+## Identity rules
 
-```python
-import logging
-logger = logging.getLogger(__name__)
+Use one stable pseudonymous application ID across a user's sessions. Never send email, name, phone number, or another raw personal identifier merely for correlation.
 
-logger.info(
-    "User sent message",
-    extra={"gen_ai.session_id": session_id},
-)
-```
+- tenant-scope or namespace IDs when local identifiers could collide;
+- define how anonymous users receive a stable pseudonymous ID;
+- do not collapse every anonymous user to the same `anonymous` value;
+- do not invent anonymous-to-signed-in identity merging during instrumentation.
 
-### Supported attribute names
+Agent Soul describes the application. Session labels describe what happened in one session. The user ID identifies who participated across sessions. Keep these concepts separate.
 
-- `gen_ai.session_id` — OpenTelemetry GenAI semantic convention (preferred)
-- `llm.session_id` — legacy/custom convention
+## Required mapping
 
-The attribute value must match the `x-reiver-session-id` sent with gateway requests.
+- Flow conversation: `x-reiver-session-id`.
+- Current OTel conversation attribute: `gen_ai.conversation.id`.
+- Reiver compatibility attribute: `gen_ai.session.id`.
+- Flow user-sticky routing: `x-reiver-user-id`.
+- Current per-user gateway analytics: OpenAI-compatible `user` body field.
+- Reiver user-correlation attribute: `gen_ai.user.id` (not a current OTel semantic-convention field).
 
-## Platform Management (MCP)
+For new code, emit both conversation attributes with the same value until Reiver's compatibility period ends. Do not introduce the older underscore spelling.
 
-To query session data:
+## Agent workflow
 
-- List sessions: `list` with `resource: 'sessions'`
-- Get session details: `get` with `resource: 'session', session_id: '...'`
-- Get session requests: `get` with `resource: 'session_requests', session_id: '...'`
+1. Confirm the Session and Identity Contract before editing code.
+2. Add Flow headers and the `user` body field at the shared LLM client boundary.
+3. Add the same attributes to relevant spans and structured logs.
+4. Ensure logs are exported through an OTel logging bridge and emitted inside active spans.
+5. End the session at the confirmed business terminal events.
+6. Test one successful episode and, when practical, one abandonment/failure episode.
+7. Verify Flow request, Watch trace, and Watch log independently; compare exact values.
+8. Prove that a second session for the same test user receives a new session ID while retaining the user ID.
+
+## MCP verification
+
+- `list` with `resource: "sessions"`.
+- `get` with `resource: "session"` or `"session_requests"`.
+- `list` with `resource: "traces"` and the expected service/time window.
+- `search` with `source: "logs"` and an attributes map containing the conversation key/value.
+- `execute` with `resource: "session", action: "end"` only when the owner authorised the action and the token has write access.
+
+If a read scope is missing, report the affected evidence as unverified. A Flow session and Watch telemetry are separate stored signals; matching identifiers are the correlation contract.

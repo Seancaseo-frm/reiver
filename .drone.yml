@@ -171,7 +171,7 @@ steps:
       - export TRACEPARENT=$(cat /otel/tp 2>/dev/null || true)
       - /otel/bin/otel-cli exec --service reiver-cicd --name "ci.compile.docs"
           --attrs "cicd.build.target=docs" --
-          sh -c 'cd docs && npm ci && npm run build'
+          sh -c 'cd docs && npm ci && npm run verify'
       - mkdir -p output/docs-dist
       - cp -r docs/.vitepress/dist/* output/docs-dist/
     environment:

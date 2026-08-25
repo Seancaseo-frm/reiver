@@ -11,18 +11,17 @@ Applications send chat completion requests to this OpenAI-compatible endpoint.
 
 ## Authentication
 
-Applications authenticate with a project API key: `Authorization: Bearer dh_your_key`
+Applications authenticate with the app's Flow SDK key (`REIVER_FLOW_API_KEY`): `Authorization: Bearer dh_your_key`. An MCP agent token does not authenticate this endpoint.
 
 ## Request Body
 
 ```json
 {
-  "model": "gpt-4o",
+  "model": "claude-sonnet-5",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello!"}
   ],
-  "temperature": 0.7,
   "max_tokens": 1024,
   "stream": false
 }
@@ -30,21 +29,21 @@ Applications authenticate with a project API key: `Authorization: Bearer dh_your
 
 ### Fields
 
-- `model` (string, required) — model identifier (e.g., `"gpt-4o"`, `"claude-3-5-sonnet"`, `"auto"`)
+- `model` (string, required) — interactive model identifier (for example, `"claude-sonnet-5"`). Prove availability before adding `"auto"` or fallbacks; do not use `:batch` catalogue entries for chat completions.
 - `messages` (array, required) — message objects with `role` and `content`. Max 1000 messages, max 1MB per message.
-- `temperature` (number) — 0.0–2.0
+- `temperature` (number) — 0.0–1.0; provider support varies. Reiver omits it for Claude families that reject non-default sampling controls.
 - `max_tokens` (integer) — max tokens to generate, up to 1,000,000
-- `top_p` (number) — nucleus sampling, 0.0–1.0
+- `top_p` (number) — nucleus sampling, 0.0–1.0; it is also omitted for those provider-managed Claude families
 - `n` (integer) — completions to generate, max 10
 - `stream` (boolean) — stream response as Server-Sent Events
 - `stop` (string or array) — stop sequences
 - `frequency_penalty` / `presence_penalty` (number) — -2.0–2.0
-- `user` (string) — end-user identifier
+- `user` (string) — stable end-user identifier; use the same value as `x-reiver-user-id` for current Reiver user analytics
 - `seed` (integer) — deterministic sampling
 - `tools` (array) — tool/function definitions
 - `tool_choice` (string or object) — `"none"`, `"auto"`, `"required"`, or specific function
 - `response_format` (object) — `{"type": "text"}`, `{"type": "json_object"}`, or `{"type": "json_schema"}`
-- `thinking` (object) — extended thinking: `{"type": "enabled", "budget_tokens": 10000}`
+- `thinking` (object) — compatibility toggle where supported. Claude 5 uses adaptive thinking; do not add legacy manual budgets to Sonnet 5 or Fable 5.
 - `reasoning_effort` (string) — for o-series: `"low"`, `"medium"`, `"high"`
 - `models` (array) — ordered fallback models, max 5
 - `provider` (object) — provider preferences: `order`, `only`, `ignore`, `allow_fallbacks`, `sort`
@@ -73,13 +72,13 @@ Applications authenticate with a project API key: `Authorization: Bearer dh_your
 
 ### Required
 
-- `Authorization` — `Bearer dh_your_key` (project API key)
+- `Authorization` — `Bearer dh_your_key` (`REIVER_FLOW_API_KEY` SDK key)
 
 ### Optional
 
 - `x-reiver-prompt-config` — prompt config name
 - `x-reiver-session-id` — session identifier for budgets and sticky rollout allocation
-- `x-reiver-user-id` — user identifier for user-sticky rollout allocation
+- `x-reiver-user-id` — stable user identifier for user-sticky rollout allocation; also set the request body's `user` field to this value
 - `x-reiver-force-variant` — `"target"` or `"baseline"` (debugging only)
 - `x-reiver-var-{name}` — template variable value (normalized: `x-reiver-var-user-name` → `user_name`)
 
@@ -90,7 +89,7 @@ Applications authenticate with a project API key: `Authorization: Bearer dh_your
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1700000000,
-  "model": "gpt-4o",
+  "model": "claude-sonnet-5",
   "choices": [{
     "index": 0,
     "message": {"role": "assistant", "content": "Hello! How can I help you?"},

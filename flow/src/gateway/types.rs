@@ -141,7 +141,7 @@ pub struct ChatCompletionRequest {
     /// The messages for the chat conversation.
     pub messages: Vec<ChatMessage>,
 
-    /// Sampling temperature (0.0 to 2.0). Higher = more random.
+    /// Sampling temperature (0.0 to 1.0). Higher = more random.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
 
@@ -294,7 +294,7 @@ impl ChatCompletionRequest {
     /// - model is not empty
     /// - messages array is not empty and within limits
     /// - individual message content does not exceed 1MB
-    /// - temperature is in valid range (0.0-2.0)
+    /// - temperature is in valid range (0.0-1.0)
     /// - max_tokens is within limits
     /// - top_p is in valid range (0.0-1.0)
     /// - frequency_penalty is in valid range (-2.0-2.0)

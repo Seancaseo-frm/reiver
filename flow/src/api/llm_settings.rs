@@ -814,6 +814,26 @@ struct ModelEntry {
     name: String,
 }
 
+/// The settings, prompt, and playground selectors drive synchronous gateway
+/// requests. Batch entries are asynchronous, while Anthropic fast aliases are
+/// only usable for model families supported by Anthropic's native fast mode.
+fn is_interactive_model(model_id: &str) -> bool {
+    if model_id.ends_with(":batch") {
+        return false;
+    }
+
+    let normalized = model_id.replace('.', "-");
+    if normalized.starts_with("claude-") && normalized.ends_with("-fast") {
+        let base = normalized.trim_end_matches("-fast");
+        return base == "claude-opus-4-8"
+            || base.starts_with("claude-opus-4-8-")
+            || base == "claude-opus-5"
+            || base.starts_with("claude-opus-5-");
+    }
+
+    true
+}
+
 /// Return all known models grouped by provider, served from in-memory cache.
 async fn list_models(State(state): State<Arc<FlowState>>) -> Json<ModelCatalogResponse> {
     Json(build_catalog(&state, None).await)
@@ -866,6 +886,7 @@ async fn build_catalog(
                 .map(|entries| {
                     entries
                         .iter()
+                        .filter(|entry| is_interactive_model(&entry.gateway_model_id()))
                         .map(|e| ModelEntry {
                             id: e.gateway_model_id(),
                             name: e.name.clone(),
@@ -1045,6 +1066,17 @@ mod tests {
     fn default_settings_has_empty_fallback_models() {
         let s = LlmSettings::default();
         assert!(s.default_fallback_models.is_empty());
+    }
+
+    #[test]
+    fn interactive_catalog_excludes_batch_variants() {
+        assert!(is_interactive_model("claude-sonnet-5"));
+        assert!(is_interactive_model("claude-opus-4.8-fast"));
+        assert!(is_interactive_model("claude-opus-5-fast"));
+        assert!(!is_interactive_model("claude-opus-4.7-fast"));
+        assert!(!is_interactive_model("claude-opus-4.6-fast"));
+        assert!(!is_interactive_model("claude-sonnet-5:batch"));
+        assert!(!is_interactive_model("gpt-5.4:batch"));
     }
 
     #[test]

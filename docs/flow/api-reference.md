@@ -18,12 +18,11 @@ Create a chat completion. Supports both streaming and non-streaming responses.
 
 ```json
 {
-  "model": "gpt-4o",
+  "model": "claude-sonnet-5",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello!"}
   ],
-  "temperature": 0.7,
   "max_tokens": 1024,
   "stream": false
 }
@@ -31,22 +30,22 @@ Create a chat completion. Supports both streaming and non-streaming responses.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `model` | string | Yes | Model identifier (e.g., `"gpt-4o"`, `"claude-3-5-sonnet"`, `"auto"`). |
+| `model` | string | Yes | Interactive model identifier (for example, `"claude-sonnet-5"`). Prove availability in the Playground or response headers before adding `"auto"` or fallbacks. Batch catalogue IDs are not valid interactive choices. |
 | `messages` | array | Yes | Array of message objects. Max 1000 messages, max 1MB per message. |
-| `temperature` | number | No | Sampling temperature, 0.0–2.0. Higher values produce more random output. |
+| `temperature` | number | No | Sampling temperature, 0.0–1.0. Provider support varies; Reiver omits it for Claude models that reject non-default sampling controls. |
 | `max_tokens` | integer | No | Maximum tokens to generate. Max 1,000,000. |
-| `top_p` | number | No | Nucleus sampling threshold, 0.0–1.0. |
+| `top_p` | number | No | Nucleus sampling threshold, 0.0–1.0. Provider support varies; it is omitted for the same provider-managed Claude families. |
 | `n` | integer | No | Number of completions to generate. Max 10. |
 | `stream` | boolean | No | If `true`, response is streamed as Server-Sent Events. |
 | `stop` | string or array | No | Stop sequence(s) where generation halts. |
 | `frequency_penalty` | number | No | Frequency penalty, -2.0–2.0. |
 | `presence_penalty` | number | No | Presence penalty, -2.0–2.0. |
-| `user` | string | No | End-user identifier for abuse monitoring. |
+| `user` | string | No | Stable end-user identifier. Set it to the same value as `x-reiver-user-id` for current Reiver user analytics. |
 | `seed` | integer | No | Seed for deterministic sampling. |
 | `tools` | array | No | Tool/function definitions the model may call. |
 | `tool_choice` | string or object | No | Controls tool usage: `"none"`, `"auto"`, `"required"`, or a specific function. |
 | `response_format` | object | No | Response format: `{"type": "text"}`, `{"type": "json_object"}`, or `{"type": "json_schema"}`. |
-| `thinking` | object | No | Extended thinking config: `{"type": "enabled", "budget_tokens": 10000}`. |
+| `thinking` | object | No | Compatibility toggle for models that support it. Claude 5 uses adaptive thinking; do not send legacy manual budgets to Sonnet 5 or Fable 5. |
 | `reasoning_effort` | string | No | For o-series models: `"low"`, `"medium"`, or `"high"`. |
 | `models` | array | No | Ordered fallback model list. If the primary `model` fails, these are tried in order. Max 5. See [Routing](/flow/routing). |
 | `provider` | object | No | Provider preference object with fields: `order` (preferred provider list), `only` (restrict to these), `ignore` (skip these), `allow_fallbacks` (bool), `sort` (`"latency"`). See [Routing](/flow/routing). |
@@ -82,7 +81,7 @@ When `content` is an array, each element is a content part:
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1700000000,
-  "model": "gpt-4o",
+  "model": "claude-sonnet-5",
   "choices": [
     {
       "index": 0,
@@ -106,11 +105,11 @@ When `content` is an array, each element is a content part:
 When `stream: true`, the response is a stream of SSE events:
 
 ```
-data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1700000000,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1700000000,"model":"claude-sonnet-5","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1700000000,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1700000000,"model":"claude-sonnet-5","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1700000000,"model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":25,"completion_tokens":2,"total_tokens":27}}
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1700000000,"model":"claude-sonnet-5","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":25,"completion_tokens":2,"total_tokens":27}}
 
 data: [DONE]
 ```
@@ -226,7 +225,7 @@ List supported model prefixes.
 
 | Header | Description |
 |--------|-------------|
-| `Authorization` | `Bearer dh_your_key` — your Reiver API key. |
+| `Authorization` | `Bearer dh_your_key` — the application's Reiver SDK key (`REIVER_FLOW_API_KEY`). |
 
 ### Optional
 
@@ -234,7 +233,7 @@ List supported model prefixes.
 |--------|-------------|
 | `x-reiver-prompt-config` | Name of the prompt config to apply. Alternative to the `prompt_config` body field. |
 | `x-reiver-session-id` | Session identifier for session budgets and session-sticky rollout allocation. |
-| `x-reiver-user-id` | User identifier for user-sticky rollout allocation. |
+| `x-reiver-user-id` | Stable user identifier for user-sticky rollout allocation. Also set the request body's `user` field to this value for current per-user analytics. |
 | `x-reiver-force-variant` | Force a rollout variant: `"target"` or `"baseline"`. For debugging only. |
 | `x-reiver-var-{name}` | Template variable value. Header name is normalized: `x-reiver-var-user-name` becomes `user_name`. Max 255 characters per value. |
 

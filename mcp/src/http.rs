@@ -217,14 +217,17 @@ pub async fn handle_mcp(
 
     let id = request.id.clone();
 
-    // Methods that don't need auth
+    // Only protocol negotiation is public. Documentation resources are public
+    // elsewhere on the docs site, but the remote MCP resource surface must
+    // authenticate so a successful read proves the configured agent token.
     let response = match request.method.as_str() {
-        "initialize" => Json(handle_initialize(id, &state)).into_response(),
-        "ping" => Json(JsonRpcResponse::success(id, serde_json::json!({}))).into_response(),
-        "resources/list" => Json(handle_list_resources(id)).into_response(),
-        "resources/read" => Json(handle_read_resource(id, request.params)).into_response(),
+        method if !method_requires_auth(method) => match method {
+            "initialize" => Json(handle_initialize(id, &state)).into_response(),
+            "ping" => Json(JsonRpcResponse::success(id, serde_json::json!({}))).into_response(),
+            _ => unreachable!("public method allowlist and dispatcher must agree"),
+        },
         _ => {
-            // All other methods require auth
+            // Resources and tools require an authenticated agent token.
             let (project_id, api_key, scopes, key_prefix, key_label, created_by, org_id) =
                 match resolve_auth(&state, &headers).await {
                     Ok(auth) => auth,
@@ -274,6 +277,8 @@ pub async fn handle_mcp(
             };
 
             let rpc_response = match request.method.as_str() {
+                "resources/list" => handle_list_resources(id.clone()),
+                "resources/read" => handle_read_resource(id.clone(), request.params),
                 "tools/list" => handle_list_tools(id.clone(), &state),
                 "tools/call" => {
                     handle_call_tool(id.clone(), &state, &context, request.params).await
@@ -291,6 +296,10 @@ pub async fn handle_mcp(
 
     record_duration(metrics, &method, started);
     response
+}
+
+fn method_requires_auth(method: &str) -> bool {
+    !matches!(method, "initialize" | "ping")
 }
 
 fn record_duration(metrics: &McpMetrics, method: &str, started: std::time::Instant) {
@@ -314,12 +323,9 @@ fn handle_initialize(id: Option<serde_json::Value>, state: &McpHttpState) -> Jso
             "version": env!("CARGO_PKG_VERSION")
         },
         "instructions": format!(
-            "Reiver platform MCP server with {} tools. \
-             Platform operations (querying data, managing dashboards, alerts, prompts, billing) \
-             are performed through these tools. REST API endpoints and SDKs described in the \
-             documentation resources are for application integration and require application \
-             API keys — they do not accept agent tokens.",
-            tools_count
+            "{} This server exposes {} scoped tools.",
+            crate::docs::SERVER_INSTRUCTIONS,
+            tools_count,
         )
     });
     JsonRpcResponse::success(id, result)
@@ -436,5 +442,20 @@ fn handle_read_resource(
             JsonRpcResponse::success(id, contents)
         }
         None => JsonRpcResponse::error(id, -32002, format!("Resource not found: {uri}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::method_requires_auth;
+
+    #[test]
+    fn remote_resources_require_an_agent_token() {
+        assert!(!method_requires_auth("initialize"));
+        assert!(!method_requires_auth("ping"));
+        assert!(method_requires_auth("resources/list"));
+        assert!(method_requires_auth("resources/read"));
+        assert!(method_requires_auth("tools/list"));
+        assert!(method_requires_auth("tools/call"));
     }
 }

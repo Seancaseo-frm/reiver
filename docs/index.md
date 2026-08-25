@@ -7,11 +7,11 @@ hero:
   tagline: Distributed tracing, prompt hub & LLM gateway, and federated data warehouse — in one platform, written in Rust.
   actions:
     - theme: brand
+      text: Choose a Quickstart
+      link: /quickstart
+    - theme: alt
       text: Flow — Prompt Hub & LLM Gateway
       link: /flow/getting-started
-    - theme: alt
-      text: Watch — APM
-      link: /watch/
     # Pond disabled — re-enable when Pond launches
     # - theme: alt
     #   text: Pond — Data Warehouse
@@ -32,7 +32,7 @@ features:
   #   details: Connect PostgreSQL, Stripe, CSV, S3 Parquet, Kafka, and 30+ other sources. Query them all with standard SQL through any PostgreSQL client. No ETL required.
   #   link: /pond/
   - title: AI Agent
-    details: Let AI agents interact with the platform via MCP. 6 high-level tools covering projects, prompts, APM, dashboards, alerts, and billing. Plus an in-app AI assistant.
+    details: Let AI agents read onboarding guidance and operate the platform through 5 focused MCP tools covering prompts, APM, dashboards, alerts, and billing.
     link: /agent/
   - title: SDKs
     details: Client libraries for Python, Rust, Unity, and Unreal Engine. Capture exceptions, send metrics, and integrate in minutes.

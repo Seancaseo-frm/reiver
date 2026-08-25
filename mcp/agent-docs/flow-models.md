@@ -1,41 +1,31 @@
-# Flow — Supported Models
+# Flow — model selection for agents
 
-Flow routes requests to the correct provider based on the model name prefix. Any model with a matching prefix is routed correctly.
+The model catalogue is dynamic routing/pricing metadata. It is not proof that a provider key can call every historical model entry. When integrating an application, prove the exact selection in the Playground or with a gateway response and record `x-reiver-provider` plus `x-reiver-model-used`.
 
-## OpenAI
+## Baseline rule
 
-Known models: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `gpt-3.5-turbo`, `o1`, `o1-mini`, `o3`, `o3-mini`.
+Preserve the application's existing provider and explicit model for the first Reiver test. Do not add auto-routing, a fallback provider, or infer a replacement for a retired specialist model.
 
-Routing prefixes: `gpt-`, `o1`, `o1-`, `o3`, `o3-`, `o4`, `o4-`, `chatgpt-`, `text-embedding-`, `whisper-`, `dall-e-`, `tts-`.
+For current Anthropic onboarding, use `claude-sonnet-5` as the balanced default unless the app already requires `claude-fable-5` or `claude-opus-5`.
 
-## Anthropic
+## Variants
 
-Known models: `claude-sonnet-4`, `claude-opus-4`, `claude-haiku-4-5`, `claude-3-5-sonnet`, `claude-3-opus`, `claude-3-5-haiku`, `claude-3-haiku`.
+- Standard model: synchronous application inference; use for the baseline.
+- `claude-opus-5-fast` and `claude-opus-4.8-fast`: Anthropic fast-mode aliases. Reiver maps them to native `speed: "fast"`; the Anthropic account still needs research-preview access and pays premium rates.
+- `:batch`: asynchronous provider batch processing/pricing metadata. Flow's interactive chat-completion endpoint does not create provider batch jobs.
 
-Routing prefix: `claude-`. Also available through AWS Bedrock.
+Interactive project selectors exclude `:batch` and unsupported historical Claude fast aliases. The public pricing catalogue may still include them.
 
-## Google Gemini
+## Claude 5 compatibility
 
-Known models: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash`, `gemini-1.5-pro`, `gemini-1.5-flash`, `gemini-pro`.
+Claude Sonnet 5, Opus 5, Fable 5 and recent Opus 4.7/4.8 models reject non-default sampling fields. Reiver's Anthropic adapter omits `temperature` and `top_p` for them, including values inherited from managed prompts. They must not be treated as deterministic or cacheable merely because the caller requested temperature zero.
 
-Routing prefix: `gemini-`.
+Claude 5 uses adaptive thinking. Do not add legacy manual thinking budgets to Sonnet 5 or Fable 5. Reiver preserves their adaptive default and translates the compatibility toggle to adaptive thinking where recent Opus models support it.
 
-## AWS Bedrock
+## Routing identifiers
 
-Uses Bedrock model IDs directly. Recognized prefixes: `bedrock/`, `anthropic.`, `amazon.`, `meta.`, `mistral.`, `cohere.`, `ai21.`.
+Direct providers use prefixes such as `gpt-`, `claude-` and `gemini-`. Provider-qualified gateways use identifiers such as `deepinfra/...`, `deepseek/...`, `mistral/...`, `together/...` and `theta/...`. Copy the exact live project-catalog identifier instead of guessing prefix or alias behaviour.
 
-## DeepSeek
+Each direct provider needs a key configured in Reiver. Provider keys stay in Reiver and must not be requested through MCP or placed in application code.
 
-Models: `deepseek/deepseek-chat`, `deepseek/deepseek-reasoner`. Prefix: `deepseek/` (stripped before forwarding).
-
-## Theta EdgeCloud
-
-Models: `theta/llama_3_1_70b`, `theta/llama_3_8b`, `theta/qwen3`, `theta/gpt_oss_120b`, `theta/minimax_m2_5`. Prefix: `theta/`. Aliases use underscores. Streaming supported.
-
-## Auto Mode
-
-Setting `model: "auto"` selects from the project's preferred models list based on availability and latency. Configure preferred models in gateway settings.
-
-## Provider Keys
-
-Each provider requires an API key configured in project settings. Requests targeting a provider without a configured key return an error.
+After the explicit path passes, the user may choose `model: "auto"`, preferred models, or fallback providers. Verify actual response headers again after each routing change.

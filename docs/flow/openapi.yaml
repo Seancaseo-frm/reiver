@@ -74,7 +74,7 @@ components:
       properties:
         model:
           type: string
-          description: 'Model identifier (e.g. "gpt-4o", "claude-3-5-sonnet", "auto")'
+          description: 'Interactive model identifier (for example "claude-sonnet-5"). Verify availability before using auto/fallback routing; batch catalog entries are not interactive choices.'
         messages:
           type: array
           items:
@@ -82,7 +82,8 @@ components:
         temperature:
           type: number
           minimum: 0
-          maximum: 2
+          maximum: 1
+          description: Provider support varies. Reiver omits unsupported values for provider-managed Claude model families.
         max_tokens:
           type: integer
           maximum: 1000000

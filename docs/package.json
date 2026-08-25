@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
-    "preview": "vitepress preview"
+    "preview": "vitepress preview",
+    "check:source-links": "node scripts/check-source-links.mjs",
+    "check:links": "node scripts/check-built-links.mjs",
+    "verify": "node scripts/check-source-links.mjs && vitepress build && node scripts/check-built-links.mjs"
   },
   "devDependencies": {
     "vitepress": "^1.6.3"

@@ -2,6 +2,19 @@
 
 Watch is Reiver's **OpenTelemetry-native** APM product: distributed tracing, error tracking, log aggregation, real-time metrics, continuous profiling, dashboards, and alerts. Watch accepts standard OTLP data — any application or infrastructure component that speaks OpenTelemetry works out of the box.
 
+Watch is an independently completable onboarding track. It does not require a provider key, a Flow gateway request, or an MCP write scope.
+
+### Track definition of done
+
+- one real application trace is queryable under the expected `service.name`;
+- one known structured log is queryable and correlated by trace ID or conversation ID;
+- one known application or runtime metric has a recent data point;
+- all three signals use the intended service identity;
+- evidence is retrieved in the UI or through MCP with `observability:read`;
+- no SDK key appears in source, telemetry, logs, or the report.
+
+Do not fail a Watch-only onboarding because Flow evidence is absent. Session/user correlation is optional unless the owner wants business-episode or cross-product analysis; when they do, read `agent://flow/session-telemetry` and confirm the shared Session and Identity Contract.
+
 ## Application Integration
 
 > **This section documents how the user's application sends telemetry data to Watch.**
@@ -15,40 +28,106 @@ Applications send OpenTelemetry data (traces, logs, metrics) to Watch.
 |---------|-------|
 | Endpoint | `https://reiver.ai/api/watch/ingest` |
 | Protocol | `http/protobuf` or `http/json` |
-| Header | `Authorization: Bearer <project-api-key>` |
+| Header | `Authorization: Bearer <SDK key>` |
 
 Gzip compression is supported. AWS X-Ray segments are also accepted at `/api/xray/segment`.
 
-### Python
+Bind the SDK key to `REIVER_WATCH_API_KEY`. The MCP agent token is not accepted by Watch ingestion.
+
+### Full-signal requirement
+
+A complete application integration has three independently initialized pipelines:
+
+| Signal | Required path |
+|---|---|
+| Traces | instrumentation/manual spans → tracer provider → span processor → OTLP trace exporter |
+| Logs | logging bridge/handler → logger provider → log record processor → OTLP log exporter |
+| Metrics | instruments/runtime instrumentation → meter provider → periodic reader → OTLP metric exporter |
+
+Setting an endpoint variable does not install packages, initialize providers, bridge console logs, or create a metric instrument. A trace exporter does not export logs or metrics.
+
+SDKs that implement standard OpenTelemetry environment configuration can use:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://reiver.ai/api/watch/ingest"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer $REIVER_WATCH_API_KEY"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_SERVICE_NAME="my-app"
+export OTEL_TRACES_EXPORTER="otlp"
+export OTEL_LOGS_EXPORTER="otlp"
+export OTEL_METRICS_EXPORTER="otlp"
+```
+
+The base endpoint automatically receives `/v1/traces`, `/v1/logs`, or `/v1/metrics` from conforming exporters. When configuring a signal-specific endpoint, include the complete signal path. Header parsing varies by SDK; prefer programmatic headers when available and inspect exporter diagnostics without printing the credential.
+
+### Complete Python diagnostic
+
+This example deliberately emits one span, one correlated structured log, and one metric. Preserve existing providers when adapting it to an application.
 
 ```python
-from opentelemetry import trace
+import logging
+import os
+
+from opentelemetry import metrics, trace
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
 
-exporter = OTLPSpanExporter(
-    endpoint="https://reiver.ai/api/watch/ingest/v1/traces",
-    headers={"Authorization": "Bearer dh_..."},
+base = "https://reiver.ai/api/watch/ingest"
+headers = {"Authorization": f"Bearer {os.environ['REIVER_WATCH_API_KEY']}"}
+resource = Resource.create({"service.name": "reiver-onboarding-smoke"})
+
+trace_provider = TracerProvider(resource=resource)
+trace_provider.add_span_processor(BatchSpanProcessor(
+    OTLPSpanExporter(endpoint=f"{base}/v1/traces", headers=headers)
+))
+trace.set_tracer_provider(trace_provider)
+
+metric_reader = PeriodicExportingMetricReader(
+    OTLPMetricExporter(endpoint=f"{base}/v1/metrics", headers=headers),
+    export_interval_millis=5_000,
 )
-provider = TracerProvider()
-provider.add_span_processor(BatchSpanProcessor(exporter))
-trace.set_tracer_provider(provider)
-```
+metric_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+metrics.set_meter_provider(metric_provider)
 
-### Node.js
+logger_provider = LoggerProvider(resource=resource)
+logger_provider.add_log_record_processor(BatchLogRecordProcessor(
+    OTLPLogExporter(endpoint=f"{base}/v1/logs", headers=headers)
+))
+set_logger_provider(logger_provider)
+logger = logging.getLogger("reiver-onboarding")
+logger.setLevel(logging.INFO)
+logger.addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
 
-```javascript
-const { NodeSDK } = require('@opentelemetry/sdk-node');
-const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-proto');
+session_id = "onboarding-smoke-1"
+user_id = "onboarding-user-1"
+tracer = trace.get_tracer("reiver-onboarding")
+counter = metrics.get_meter("reiver-onboarding").create_counter(
+    "reiver.onboarding.requests"
+)
 
-const sdk = new NodeSDK({
-  traceExporter: new OTLPTraceExporter({
-    url: 'https://reiver.ai/api/watch/ingest/v1/traces',
-    headers: { Authorization: 'Bearer dh_...' },
-  }),
-});
-sdk.start();
+with tracer.start_as_current_span("reiver.onboarding.smoke") as span:
+    span.set_attribute("gen_ai.conversation.id", session_id)
+    span.set_attribute("gen_ai.session.id", session_id)  # Reiver compatibility
+    span.set_attribute("gen_ai.user.id", user_id)
+    counter.add(1, {"test": "onboarding"})
+    logger.info("reiver-watch-ok", extra={
+        "gen_ai.conversation.id": session_id,
+        "gen_ai.session.id": session_id,
+        "gen_ai.user.id": user_id,
+    })
+
+trace_provider.force_flush()
+metric_provider.force_flush()
+logger_provider.force_flush()
 ```
 
 ### OTel Collector
@@ -58,18 +137,54 @@ exporters:
   otlphttp/reiver:
     endpoint: https://reiver.ai/api/watch/ingest
     headers:
-      Authorization: "Bearer dh_..."
+      Authorization: "Bearer ${env:REIVER_WATCH_API_KEY}"
     compression: gzip
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
 
 service:
   pipelines:
     traces:
+      receivers: [otlp]
+      processors: [batch]
       exporters: [otlphttp/reiver]
     logs:
+      receivers: [otlp]
+      processors: [batch]
       exporters: [otlphttp/reiver]
     metrics:
+      receivers: [otlp]
+      processors: [batch]
       exporters: [otlphttp/reiver]
 ```
+
+Defining an exporter without adding it to `service.pipelines` does not enable it. Each pipeline needs at least a receiver and exporter.
+
+### Correlation and verification
+
+Use the same session and user values across Flow and Watch:
+
+- Flow: `x-reiver-session-id`, `x-reiver-user-id`, and the OpenAI-compatible `user` body field.
+- OTel: `gen_ai.conversation.id` and `gen_ai.user.id`; also emit `gen_ai.session.id` with the same session value during Reiver's compatibility period.
+
+Emit the diagnostic log while the test span is active so the logging bridge can attach trace/span context. Then prove one known trace, the `reiver-watch-ok` log, and the `reiver.onboarding.requests` metric arrived under the expected `service.name`. Use MCP `list` with `resource: 'metric_names'` before querying metrics and inspect trace/log attribute keys rather than assuming an attribute arrived.
+
+Common failures:
+
+- traces but no logs: only tracing was initialized or stdout was never bridged;
+- traces but no metrics: no periodic reader or no instrument produced a measurement;
+- logs without trace IDs: the log ran outside the active span or the bridge did not copy context;
+- nothing arrives: wrong protocol/path, no provider, blocked egress, auth failure, or process exit before flush;
+- fragmented services: inconsistent or missing `service.name` resources.
 
 ## Infrastructure & Service Monitoring
 
@@ -82,7 +197,7 @@ Common patterns:
 - **Host metrics** (CPU, memory, disk, network) — use `hostmetricsreceiver`
 - **Cloud providers** — AWS CloudWatch, Azure Monitor, GCP Cloud Monitoring, OCI via Watch's built-in cloud integrations or their respective OTel receivers
 
-When helping the user set up monitoring, generate the OTel Collector configuration for their stack and point the OTLP HTTP exporter at `https://reiver.ai/api/watch/ingest` with their project API key.
+When helping the user set up monitoring, generate the OTel Collector configuration for their stack and point the OTLP HTTP exporter at `https://reiver.ai/api/watch/ingest` with `REIVER_WATCH_API_KEY`.
 
 ## Features
 

@@ -1,80 +1,128 @@
-# Getting Started with Flow
+# Flow + Prompt Hub quickstart
 
-Flow is Reiver's prompt hub and LLM gateway. It lets you version, test, and roll out prompts centrally, and exposes an **OpenAI-compatible API** so you can connect any existing application by changing a single URL — no new SDK required.
+Flow is Reiver's OpenAI-compatible LLM gateway and prompt hub. Existing OpenAI-compatible clients connect by changing the base URL and using a Reiver SDK key.
 
-## Quick Start
+This is an independently completable track. It does not require Watch, application logs, or metrics. For the combined Flow, Watch, identity, and MCP workflow, use the [Complete Reiver Quickstart](/quickstart).
 
-Point any OpenAI-compatible client at Reiver. Here's a Python example:
+## Definition of done for this track
+
+| Check | Required evidence |
+|---|---|
+| Provider | The selected provider connection test passed |
+| Gateway | One real application request returned `200` |
+| Routing | `x-reiver-provider`, `x-reiver-model-used`, and `x-request-id` were recorded |
+| Identity | If the application has users/sessions, its Session and Identity Contract is confirmed and matching identifiers are visible |
+| Prompt Hub | If a managed prompt is part of the chosen scope, its version was read back, tested, and used by a request |
+| Secrets | Provider and SDK keys do not appear in source, logs, or output |
+
+Gateway-only users can stop when the provider, gateway, routing, and secret checks pass. Prompt Hub and session correlation are required only when they are part of the selected use case—not as artificial onboarding work.
+
+## Prerequisites
+
+1. Add one provider key in Reiver under **Prompt Hub → Integrations**.
+2. Run the provider connection test.
+3. Create an SDK key under **Settings → General → SDK keys**.
+4. Bind it in the application runtime as `REIVER_FLOW_API_KEY`.
+
+Provider keys remain in Reiver. They are not placed in the application or given to the coding agent.
+
+## Python
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="dh_your_key",
-    base_url="https://reiver.ai/api/gateway/v1"
+    api_key=os.environ["REIVER_FLOW_API_KEY"],
+    base_url="https://reiver.ai/api/gateway/v1",
 )
 
+session_id = "conversation-123"
+user_id = "user-456"
+
 response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Hello!"}
-    ]
+    model="claude-sonnet-5",
+    user=user_id,
+    messages=[{"role": "user", "content": "Hello from Reiver"}],
+    extra_headers={
+        "x-reiver-session-id": session_id,
+        "x-reiver-user-id": user_id,
+    },
 )
 
 print(response.choices[0].message.content)
 ```
 
-That's it. Your existing system prompt, messages, and parameters are forwarded to the LLM provider exactly as you send them. Flow adds observability, cost tracking, and failover on top — without modifying your request.
+The request's `user` field currently populates per-user gateway analytics. The `x-reiver-user-id` header drives user-sticky prompt routing. Send the same stable ID in both.
 
-## Using Other Providers
+## Node.js / TypeScript
 
-The same API works with any supported provider. Just change the model name:
+```typescript
+import OpenAI from "openai";
 
-```python
-# Anthropic
-response = client.chat.completions.create(
-    model="claude-3-5-sonnet",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+const client = new OpenAI({
+  apiKey: process.env.REIVER_FLOW_API_KEY,
+  baseURL: "https://reiver.ai/api/gateway/v1",
+});
 
-# Google Gemini
-response = client.chat.completions.create(
-    model="gemini-2.0-flash",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+const response = await client.chat.completions.create(
+  {
+    model: "claude-sonnet-5",
+    user: "user-456",
+    messages: [{ role: "user", content: "Hello from Reiver" }],
+  },
+  {
+    headers: {
+      "x-reiver-session-id": "conversation-123",
+      "x-reiver-user-id": "user-456",
+    },
+  },
+);
 
-# AWS Bedrock
-response = client.chat.completions.create(
-    model="anthropic.claude-3-sonnet-20240229-v1:0",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+console.log(response.choices[0].message.content);
 ```
 
-Flow translates the OpenAI request format to each provider's native API automatically.
+## Inspect the actual route
 
-## Auto Model Selection
+Use cURL for the first proof because it exposes response headers directly:
 
-Set the model to `"auto"` and Flow will select the best model from your project's preferred models list:
-
-```python
-response = client.chat.completions.create(
-    model="auto",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+```bash
+curl --include https://reiver.ai/api/gateway/v1/chat/completions \
+  --header "Authorization: Bearer $REIVER_FLOW_API_KEY" \
+  --header "Content-Type: application/json" \
+  --header "x-reiver-session-id: onboarding-smoke-1" \
+  --header "x-reiver-user-id: onboarding-user-1" \
+  --data '{
+    "model": "claude-sonnet-5",
+    "user": "onboarding-user-1",
+    "messages": [{"role": "user", "content": "Reply: reiver-flow-ok"}]
+  }'
 ```
 
-The `x-reiver-model-used` response header tells you which model was selected.
+A valid baseline records:
+
+- HTTP `200`;
+- `x-reiver-provider`;
+- `x-reiver-model-used`;
+- `x-request-id`.
+
+Status alone is insufficient: a fallback could return `200` from a different provider or model.
+
+## Model selection
+
+For interactive Anthropic onboarding, `claude-sonnet-5` is the balanced default. Leave sampling at the provider default and do not add a legacy manual thinking budget. Fast mode is limited to supported Opus 5/4.8 aliases and requires Anthropic access. `:batch` entries are asynchronous provider jobs, not interactive Flow choices. See [Models and variants](/flow/models).
+
+Start with one explicit model. Add `model: "auto"`, fallback models and provider preferences only after the explicit path passes.
 
 ## Streaming
 
-Flow supports Server-Sent Events (SSE) streaming for all providers:
+Set `stream: true` as with the OpenAI API:
 
 ```python
 stream = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "Tell me a story."}],
-    stream=True
+    model="claude-sonnet-5",
+    messages=[{"role": "user", "content": "Tell me a short story."}],
+    stream=True,
 )
 
 for chunk in stream:
@@ -82,47 +130,39 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="")
 ```
 
-## Node.js / TypeScript
+## End the session
 
-```typescript
-import OpenAI from 'openai';
-
-const client = new OpenAI({
-  apiKey: 'dh_your_key',
-  baseURL: 'https://reiver.ai/api/gateway/v1',
-});
-
-const response = await client.chat.completions.create({
-  model: 'claude-3-5-sonnet',
-  messages: [{ role: 'user', content: 'Hello!' }],
-});
-
-console.log(response.choices[0].message.content);
-```
-
-## cURL
+First define the application's [Session and Identity Contract](/flow/session-telemetry). Reiver starts recording a session on the first accepted request with its `x-reiver-session-id`; there is no separate start call. Explicitly finish the confirmed conversation or task so evaluation does not wait for the 30-minute crash/abandonment fallback:
 
 ```bash
-curl https://reiver.ai/api/gateway/v1/chat/completions \
-  -H "Authorization: Bearer dh_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
+curl --request POST \
+  "https://reiver.ai/api/gateway/v1/sessions/conversation-123/end" \
+  --header "Authorization: Bearer $REIVER_FLOW_API_KEY"
 ```
 
-## What Happens to My System Prompt?
+The idempotent endpoint returns `202` when evaluation is scheduled or already queued.
 
-Your existing system prompt and messages are **preserved exactly as sent**. Flow acts as a transparent proxy by default.
+## Managed prompts
 
-If you later opt in to [Prompt Management](/flow/prompt-management), Flow can inject a managed system prompt when your request doesn't already include one. If your request already contains a system message, the managed prompt is skipped — your messages are never modified. See the [Prompt Management](/flow/prompt-management) page for the full workflow.
+Flow is a transparent proxy until the application supplies a `prompt_config`. A managed prompt is injected only when the request does not already contain a system message.
 
-## Next Steps
+```python
+response = client.chat.completions.create(
+    model="claude-sonnet-5",
+    messages=[{"role": "user", "content": user_input}],
+    extra_body={
+        "prompt_config": "math-tutor",
+        "prompt_variables": {"learner_level": "secondary"},
+    },
+)
+```
 
-- [Prompt Management](/flow/prompt-management) — Version, test, and roll out prompts
-- [Features](/flow/features) — Caching, failover, guardrails, PII masking, and more
-- [Supported Models](/flow/models) — Full list of providers and models
-- [API Reference](/flow/api-reference) — Endpoints, request/response types, and headers
+Add prompt management after the baseline gateway and telemetry checks pass.
+
+## Next steps
+
+- [Session and Identity Contract](/flow/session-telemetry)
+- [Prompt management](/flow/prompt-management)
+- [Routing and fallbacks](/flow/routing)
+- [API reference](/flow/api-reference)
+- [Watch traces, logs and metrics](/watch/)

@@ -35,8 +35,17 @@ Requests without `prompt_config` pass through unchanged — no managed prompt is
 ### How managed prompts are applied
 
 - If the request has no system message, the managed prompt is injected as a new system message.
-- If the request already has a system message, the managed prompt is skipped to avoid double-injection.
+- If the request already has a system message, only managed system-prompt injection is skipped to avoid double-injection. Other prompt-version settings can still apply.
 - All other messages (user, assistant, tool) are never modified.
+
+### Override precedence
+
+- A non-empty prompt-version `model` overrides the application's explicit model or the result of `model: "auto"`. Leave it unset to preserve the caller's model.
+- The prompt-version temperature overrides the request temperature, subject to provider capability. Reiver omits it for Claude families that reject sampling controls.
+- A positive prompt-version `max_tokens` overrides the request value.
+- Request tools and response format take precedence when present; version values fill them only when absent. `allowed_tools` can then filter the active tool list.
+
+For a baseline integration, do not apply a managed prompt. Prove one explicit provider/model path first, then introduce one override at a time and inspect `x-reiver-model-used`.
 
 ### Template variables
 

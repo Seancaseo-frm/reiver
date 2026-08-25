@@ -68,7 +68,8 @@ const PRESET_READ_ONLY = [
   'project:read',
   'llm:read',
   'observability:read',
-  'herd:read'
+  'herd:read',
+  'billing:read'
 ] as const
 
 const PRESET_STANDARD = [
@@ -86,7 +87,8 @@ const PRESET_FULL = [
   'observability:read',
   'observability:write',
   'herd:read',
-  'herd:write'
+  'herd:write',
+  'billing:read'
 ] as const
 
 const ALL_SCOPES_ORDERED = [...PRESET_FULL]
@@ -121,6 +123,12 @@ const scopeGroups: { label: string; rows: ScopeRow[] }[] = [
       { scope: 'herd:read', indent: false },
       { scope: 'herd:write', indent: true }
     ]
+  },
+  {
+    label: 'Billing',
+    rows: [
+      { scope: 'billing:read', indent: false }
+    ]
   }
 ]
 
@@ -131,7 +139,7 @@ const props = withDefaults(
   }>(),
   {
     modelValue: () => [],
-    maxScopes: () => ['project:read', 'project:write', 'llm:read', 'llm:write', 'observability:read', 'observability:write', 'herd:read', 'herd:write']
+    maxScopes: () => ['project:read', 'project:write', 'llm:read', 'llm:write', 'observability:read', 'observability:write', 'herd:read', 'herd:write', 'billing:read']
   }
 )
 

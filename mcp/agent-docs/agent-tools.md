@@ -9,6 +9,7 @@ Search across different data sources. Set `source` to select the backend.
 - `llm_requests` — text search over LLM prompts and completions. Filters: `model`, `user_id`, `session_id`, `start_time`, `end_time`.
 - `logs` — search ingested logs. Filters: `query`, `level`, `service`, `trace_id`, `time_range`, `start_time`, `end_time`, `attributes`.
 - `web` — web search for real-time information.
+- `knowledge_base` — semantic search over known platform patterns, issues, and operational guidance.
 
 Example: `{"source": "logs", "query": "timeout", "level": "error", "time_range": "24h"}`
 
@@ -60,8 +61,9 @@ Run analytics, queries, comparisons, and diagnostics. Set `analysis` to select t
 - `endpoint_summary` — API endpoint summary metrics
 - `usage` — overall platform usage
 - `usage_by_project` — per-project breakdown
-- `usage_forecast` — forecast future usage/costs
 - `budget_status` — budget status and spend tracking
+- `system_overview` — detect the project's technology stack and golden-signal queries
+- `system_overview_context` — retrieve correlated traces and logs for a time window
 
 ## execute
 
@@ -70,7 +72,7 @@ Create, update, configure, deploy, test, and run operations. Provide `resource`,
 Resources and actions:
 - `project` — create, update, create_api_key
 - `prompt` — create_config, update_config, create_version, deploy, promote, complete, pause, rollback
-- `dashboard` — create, create_from_template, update, create_widget, update_widget
+- `dashboard` — create, create_from_template, update, create_widget, import_grafana, update_widget
 - `alert_rule` — create, update
 - `integration` — configure, update, test, create_secret_slot
 - `health_check` — create, update

@@ -563,7 +563,8 @@ async fn run_single_model(
 /// Attach the correct introspection parameters for `model` to `request`.
 ///
 /// Each vendor uses a different mechanism:
-/// - Anthropic (claude-*): `thinking = { type: "enabled", budget_tokens: 10000 }`
+/// - Anthropic (claude-*): the provider adapter translates this toggle to the
+///   model's supported thinking mode (or keeps the model's adaptive default)
 /// - OpenAI o-series (o1, o3, o4*): `reasoning_effort = "medium"`
 /// All other models are passed through unchanged.
 fn apply_introspection(model: &str, request: &mut ChatCompletionRequest) {

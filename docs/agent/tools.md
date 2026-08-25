@@ -1,19 +1,18 @@
 # Available Tools
 
-The MCP server exposes **6 tools** that cover the entire Reiver platform. Each tool accepts a discriminator field that routes to the right operation, keeping the tool surface small while supporting 100+ distinct operations.
+The MCP server exposes **5 tools** that cover the Reiver platform. Each tool accepts a discriminator field that routes to the right operation, keeping the tool surface small while supporting many platform operations.
 
 All tools operate within the context of the authenticated project.
 
 ## Overview
 
-| Tool | Discriminator | Purpose | Operations |
-|------|---------------|---------|------------|
-| `search` | `source` | Find resources by text query | 3 |
-| `get` | `resource` | Retrieve a specific resource by type + ID | 21 |
-| `list` | `resource` | Browse/list resources with optional filters | 27 |
-| `analyze` | `analysis` | Metrics, analytics, comparisons, diagnostics | 18 |
-| `execute` | `resource` + `action` | Create, update, configure, deploy, test, run | 39 |
-| `delete` | `resource` | Remove a resource permanently | 5 |
+| Tool | Discriminator | Purpose |
+|------|---------------|---------|
+| `search` | `source` | Find logs, LLM requests, knowledge-base entries, or current web information |
+| `get` | `resource` | Retrieve a specific resource by type + ID |
+| `list` | `resource` | Browse/list resources with optional filters |
+| `analyze` | `analysis` | Metrics, analytics, comparisons, diagnostics |
+| `execute` | `resource` + `action` | Create, update, configure, deploy, test, run, and supported delete actions |
 
 ---
 
@@ -30,6 +29,7 @@ Search across different data sources. Set `source` to select the search backend.
 | `llm_requests` | Text search over LLM prompts and completions | `query`, `limit?`, `model?`, `user_id?`, `session_id?`, `start_time?`, `end_time?` |
 | `logs` | Search logs with cross-signal correlation | `query?`, `level?`, `service?`, `trace_id?`, `time_range?`, `start_time?`, `end_time?`, `limit?` |
 | `web` | Web search for real-time information | `query`, `max_results?` |
+| `knowledge_base` | Semantic search over known platform patterns, issues, and operational guidance | `query`, `limit?` |
 
 ---
 
@@ -64,6 +64,9 @@ Retrieve a specific resource by type and ID. Set `resource` to select the resour
 | `project` | Project details |
 | `request_scores` | LLM request quality scores |
 | `gateway_settings` | LLM gateway settings |
+| `session_profile_filter_fields` | Available fields for session-profile conditions |
+| `attachment` | File attachment content by ID |
+| `a2a_task` | Current state and messages for an A2A task |
 
 ---
 
@@ -81,6 +84,7 @@ Browse and list resources with optional filters. Set `resource` to select what t
 | `services` | Monitored services |
 | `service_versions` | Service deployment versions |
 | `sessions` | LLM sessions |
+| `session_profiles` | Session content-preservation filter profiles |
 | `exceptions` | Exception groups |
 | `incidents` | Incidents |
 | `api_endpoints` | Auto-discovered API endpoints |
@@ -104,6 +108,12 @@ Browse and list resources with optional filters. Set `resource` to select what t
 | `llm_scores` | LLM quality scores |
 | `llm_pricing` | LLM model pricing (internal) |
 | `metric_names` | Available OpenTelemetry metric names. Filters: `prefix?`, `limit?`. Returns name, type, unit, label keys. Use before querying otel_metrics. |
+| `trace_attribute_keys` | Attribute keys that actually arrived on recent traces |
+| `trace_attribute_values` | Distinct values for a selected trace attribute |
+| `log_attribute_keys` | Attribute keys that actually arrived on recent logs |
+| `log_attribute_values` | Distinct values for a selected log attribute |
+| `a2a_agents` | Agents registered in Herd |
+| `a2a_tasks` | Recent A2A tasks |
 
 ---
 
@@ -128,7 +138,8 @@ Run analytics, queries, comparisons, and diagnostics. Set `analysis` to select t
 
 | Analysis | Description |
 |----------|-------------|
-| `widget_query` | Custom ClickHouse query on observability data |
+| `widget_query` | Run a PromQL query against the project's metrics |
+| `dashboard_snapshot` | Execute all widgets and return the dashboard's current data |
 | `otel_metrics` | Query OpenTelemetry metrics by name. Params: `metric_name` (required), `from?`, `to?`, `step?`, `time_aggregation?`, `space_aggregation?`, `filters?`, `group_by?`. Use list metric_names first. |
 
 ### LLM Testing
@@ -155,8 +166,9 @@ Run analytics, queries, comparisons, and diagnostics. Set `analysis` to select t
 | `endpoint_summary` | API endpoint summary metrics |
 | `usage` | Overall platform usage |
 | `usage_by_project` | Usage broken down by project |
-| `usage_forecast` | Forecast future usage and costs |
 | `budget_status` | Budget status and spend tracking |
+| `system_overview` | Detect the project's technology stack and golden-signal queries |
+| `system_overview_context` | Retrieve correlated traces and logs for a time window |
 
 ---
 
@@ -233,7 +245,7 @@ Alert rules support four query types via `query_config.query_type` (required dis
 | `prompt` | `create_config`, `update_config`, `create_version`, `deploy`, `promote`, `complete`, `pause`, `rollback` |
 | `gateway` | `update_settings` |
 | `integration` | `configure`, `update`, `test`, `create_secret_slot` |
-| `dashboard` | `create`, `create_from_template`, `update`, `create_widget`, `update_widget` |
+| `dashboard` | `create`, `create_from_template`, `update`, `create_widget`, `import_grafana`, `update_widget` |
 | `alert_rule` | `create`, `update` |
 | `health_check` | `create`, `update` |
 | `maintenance_window` | `create`, `update` |
@@ -245,6 +257,7 @@ Alert rules support four query types via `query_config.query_type` (required dis
 | `llm_score` | `submit` |
 | `session` | `feedback`, `end` |
 | `session_profile` | `create`, `update`, `delete` |
+| `a2a` | `register_agent` |
 
 ### GitHub
 
@@ -260,21 +273,3 @@ The `github` resource delegates to a multi-action handler. The `action` field se
 | `search_code` | `query` | Search for code by keyword or symbol |
 | `link_repo` | `repository_url` | Link the project to a GitHub repository |
 | `unlink_repo` | — | Unlink the project from its repository |
-
----
-
-## `delete`
-
-Remove a resource permanently. Set `resource` to select what to delete. Each resource type has its own ID field.
-
-```json
-{ "resource": "alert_rule", "rule_id": "abc123", "confirm": true }
-```
-
-| Resource | Description |
-|----------|-------------|
-| `integration` | Delete an LLM provider integration |
-| `alert_rule` | Delete an alert rule |
-| `health_check` | Delete a health check |
-| `maintenance_window` | Delete a maintenance window |
-| `widget` | Delete a dashboard widget |

@@ -12,6 +12,10 @@ pub struct DocPage {
     pub content: &'static str,
 }
 
+/// Initialization guidance shared by the stdio and Streamable HTTP transports.
+/// Keep this concise: some MCP clients truncate server instructions.
+pub const SERVER_INSTRUCTIONS: &str = "Reiver MCP. Read agent://onboarding and gateway_settings.agent_soul first. Honour the selected Flow, Watch, or Complete track and only its definition of done. Reuse business context; confirm the Session and Identity Contract before correlation or labels, asking only about material gaps. Scopes are the hard boundary; the owner's assignment defines autonomy. Within explicit authority, act without repeated approval. Gateway and OTLP use SDK keys. Never expose credentials.";
+
 macro_rules! doc_page {
     ($uri:expr, $name:expr, $desc:expr, $path:expr) => {
         DocPage {
@@ -24,6 +28,12 @@ macro_rules! doc_page {
 }
 
 pub static ALL_DOCS: &[DocPage] = &[
+    doc_page!(
+        "agent://onboarding",
+        "Reiver — Verified Application Onboarding",
+        "Read first: business discovery, delegated autonomy, credential boundaries, integration workflow, activation and acceptance checks",
+        "../agent-docs/onboarding.md"
+    ),
     doc_page!(
         "agent://overview",
         "Reiver Overview",
@@ -57,8 +67,8 @@ pub static ALL_DOCS: &[DocPage] = &[
     ),
     doc_page!(
         "agent://flow/session-telemetry",
-        "Flow — Session Telemetry",
-        "Correlating OTel spans and logs with LLM sessions — application tagging patterns and MCP session queries",
+        "Flow — Session and Identity Contract",
+        "Choosing business session boundaries and stable pseudonymous users, then correlating Flow and Watch with MCP-verifiable identifiers",
         "../agent-docs/flow-session-telemetry.md"
     ),
     doc_page!(
@@ -105,4 +115,32 @@ pub static ALL_DOCS: &[DocPage] = &[
 /// Look up a doc page by its URI.
 pub fn find_doc(uri: &str) -> Option<&'static DocPage> {
     ALL_DOCS.iter().find(|d| d.uri == uri)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::*;
+
+    #[test]
+    fn onboarding_is_first_and_all_resource_uris_are_unique() {
+        assert_eq!(ALL_DOCS.first().map(|doc| doc.uri), Some("agent://onboarding"));
+
+        let mut uris = HashSet::new();
+        for doc in ALL_DOCS {
+            assert!(uris.insert(doc.uri), "duplicate MCP resource URI: {}", doc.uri);
+            assert!(!doc.content.trim().is_empty(), "empty MCP resource: {}", doc.uri);
+        }
+    }
+
+    #[test]
+    fn initialization_instructions_are_concise_and_track_aware() {
+        assert!(SERVER_INSTRUCTIONS.len() <= 512);
+        assert!(SERVER_INSTRUCTIONS.contains("agent://onboarding"));
+        assert!(SERVER_INSTRUCTIONS.contains("business context"));
+        assert!(SERVER_INSTRUCTIONS.contains("hard boundary"));
+        assert!(SERVER_INSTRUCTIONS.contains("selected Flow, Watch, or Complete track"));
+        assert!(SERVER_INSTRUCTIONS.contains("Session and Identity Contract"));
+    }
 }

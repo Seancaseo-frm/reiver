@@ -150,8 +150,8 @@
                   </svg>
                 </div>
                 <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Your new API key</h3>
-                  <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">This key will not be shown again. Copy it now and store it securely.</p>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Your new agent token</h3>
+                  <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">This token will not be shown again. Copy it now and store it securely.</p>
                 </div>
               </div>
               <div class="flex items-center gap-2 mb-6">
@@ -544,7 +544,8 @@ const copiedReveal = ref(false);
 const creatingKey = ref(false);
 
 const newKeyLabel = ref('');
-const newKeyScopes = ref([]);
+const ONBOARDING_AGENT_SCOPES = ['llm:read', 'observability:read'];
+const newKeyScopes = ref([...ONBOARDING_AGENT_SCOPES]);
 const newKeyExpiresAt = ref('');
 
 const allScopes = [
@@ -556,6 +557,7 @@ const allScopes = [
   'observability:write',
   'herd:read',
   'herd:write',
+  'billing:read',
 ];
 
 const todayISO = computed(() => new Date().toISOString().slice(0, 10));
@@ -565,6 +567,7 @@ const SCOPE_COLORS = {
   llm: 'bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-900/20 dark:text-purple-300 dark:ring-purple-500/30',
   observability: 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20 dark:bg-green-900/20 dark:text-green-300 dark:ring-green-500/30',
   herd: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-500/30',
+  billing: 'bg-cyan-50 text-cyan-700 ring-1 ring-inset ring-cyan-600/20 dark:bg-cyan-900/20 dark:text-cyan-300 dark:ring-cyan-500/30',
 };
 
 function scopeBadgeClass(scope) {
@@ -599,7 +602,7 @@ async function createAgentToken() {
     showKeyReveal.value = true;
     copiedReveal.value = false;
     newKeyLabel.value = '';
-    newKeyScopes.value = [];
+    newKeyScopes.value = [...ONBOARDING_AGENT_SCOPES];
     newKeyExpiresAt.value = '';
     await fetchAgentTokens();
   } catch (e) {

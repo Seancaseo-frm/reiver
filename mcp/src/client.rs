@@ -64,7 +64,7 @@ impl InternalClient {
     }
 
     /// Build a client that authenticates to the website using a user JWT
-    /// instead of a project API key. Flow/watch calls still use X-Project-Id.
+    /// instead of an agent token. Flow/watch calls still use X-Project-Id.
     pub fn new_for_user(
         website_url: String,
         flow_url: String,

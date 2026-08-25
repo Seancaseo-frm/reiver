@@ -565,10 +565,14 @@ async fn proxy_to_flow_gateway_inner(
         .filter(|k| !k.is_empty())
         .ok_or_else(|| proxy_error(StatusCode::UNAUTHORIZED, "Missing or invalid Bearer token"))?;
 
-    let project_id =
-        crate::utils::validate_project_key_cached(&state.redis, state.db.as_ref(), api_key)
-            .await
-            .map_err(|_| proxy_error(StatusCode::UNAUTHORIZED, "Invalid API key"))?;
+    let project_id = crate::utils::validate_project_key_type_cached(
+        &state.redis,
+        state.db.as_ref(),
+        api_key,
+        "sdk",
+    )
+    .await
+    .map_err(|_| proxy_error(StatusCode::UNAUTHORIZED, "Invalid SDK key"))?;
 
     check_product_access(state, project_id, Product::PromptHub).await?;
 
@@ -945,10 +949,14 @@ async fn proxy_to_watch_ingest_inner(
         .filter(|k| !k.is_empty())
         .ok_or_else(|| proxy_error(StatusCode::UNAUTHORIZED, "Missing or invalid Bearer token"))?;
 
-    let project_id =
-        crate::utils::validate_project_key_cached(&state.redis, state.db.as_ref(), api_key)
-            .await
-            .map_err(|_| proxy_error(StatusCode::UNAUTHORIZED, "Invalid API key"))?;
+    let project_id = crate::utils::validate_project_key_type_cached(
+        &state.redis,
+        state.db.as_ref(),
+        api_key,
+        "sdk",
+    )
+    .await
+    .map_err(|_| proxy_error(StatusCode::UNAUTHORIZED, "Invalid SDK key"))?;
 
     // Billing gate: block ingestion when org has no payment method and is past
     // the grace period or out of credits.

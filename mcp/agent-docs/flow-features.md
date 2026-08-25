@@ -1,6 +1,6 @@
 # Flow — Features
 
-Flow provides these features on top of basic LLM routing. All features work across every supported provider.
+Flow provides these features on top of basic LLM routing. Routing, observability and policy controls are provider-independent; sampling, thinking, tools and structured output remain provider/model capabilities.
 
 ## Routing & Failover
 
@@ -13,7 +13,7 @@ Response headers indicate when failover occurs: `x-reiver-fallback-used`, `x-rei
 
 ## Semantic Caching
 
-Two-layer cache (in-process LRU + distributed semantic cache). Eligible when `stream` is false, `temperature` is 0, no tools specified, and `n` is 1. The `x-reiver-cache` response header reports `"hit"`, `"miss"`, or `"skip"`.
+Two-layer cache (in-process LRU + distributed semantic cache). Eligible when `stream` is false, `temperature` is 0, no tools specified, and `n` is 1. Models that reject temperature controls, including Claude Sonnet 5, Opus 5, Fable 5 and recent Opus 4.7/4.8 variants, are excluded because the requested zero cannot make them deterministic. The `x-reiver-cache` response header reports `"hit"`, `"miss"`, or `"skip"`.
 
 ## Guardrails
 
@@ -50,9 +50,11 @@ Per-session cost limits. Applications set `x-reiver-session-id` and the project 
 
 JSON schema validation on LLM responses. Configured per prompt version via `response_format`. Failure actions: `error`, `retry`, `retry_then_passthrough`, `log_only`.
 
-## Extended Thinking
+## Thinking
 
-- Anthropic Claude — extended thinking with configurable budget tokens
+- Claude 5 — adaptive thinking; do not add legacy manual budget fields to Sonnet 5 or Fable 5
+- Recent Claude Opus — Reiver translates the compatibility toggle to adaptive thinking where supported
+- Earlier Claude models — manual extended-thinking budgets where supported
 - OpenAI o-series — reasoning effort levels (low/medium/high)
 - Google Gemini — thinking mode
 

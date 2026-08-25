@@ -4,10 +4,10 @@
       "command": "reiver-mcp",
       "args": ["--transport", "stdio"],
       "env": {
-        "REIVER_API_KEY": "<your-project-api-key>",
-        "WEBSITE_URL": "https://app.reiver.io",
-        "FLOW_URL": "https://flow.reiver.io",
-        "WATCH_URL": "https://watch.reiver.io"
+        "REIVER_API_KEY": "<your-agent-token>",
+        "WEBSITE_URL": "https://reiver.ai",
+        "FLOW_URL": "https://reiver.ai",
+        "WATCH_URL": "https://reiver.ai"
       }
     }
   }

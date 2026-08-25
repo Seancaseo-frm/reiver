@@ -838,16 +838,16 @@ pub(super) async fn handle_streaming_response(
         HeaderName::from_static("x-reiver-provider"),
         super::header_value(ctx.provider_name, "unknown"),
     );
+    response.headers_mut().insert(
+        HeaderName::from_static("x-reiver-model-used"),
+        super::header_value(&ctx.model_used, "unknown"),
+    );
 
     // Add fallback headers if applicable
     if ctx.fallback_used {
         response.headers_mut().insert(
             HeaderName::from_static("x-reiver-fallback-used"),
             HeaderValue::from_static("true"),
-        );
-        response.headers_mut().insert(
-            HeaderName::from_static("x-reiver-model-used"),
-            super::header_value(&ctx.model_used, "unknown"),
         );
     }
     if ctx.retry_count > 0 {

@@ -1,157 +1,77 @@
-# Flow — Getting Started
+# Flow + Prompt Hub — application integration
 
-> **This page documents how the user's application connects to Flow.**
-> You (the agent) do not call these endpoints yourself. Use this information when the user asks you to help integrate their application — write code that their app will run, using the endpoints and patterns below. To manage Flow configuration (prompts, integrations, settings), use the MCP tools instead.
+> These endpoints are called by the user's application with an SDK key. The MCP agent token does not authenticate application gateway requests.
 
-Flow is Reiver's prompt hub and LLM gateway. It exposes an OpenAI-compatible API so applications can connect by changing a single URL.
+Read `agent://onboarding` before editing an application.
 
-## Application Integration
+This track is independently completable. It does not require Watch, logs, or metrics unless the owner's selected scope is Complete Reiver.
 
-Applications connect to the Flow gateway by pointing any OpenAI-compatible client at Reiver:
+## Track definition of done
 
-### Python
+- the selected provider connection test passes;
+- one real application gateway request returns `200`;
+- actual `x-reiver-provider`, `x-reiver-model-used`, and `x-request-id` are recorded;
+- when sessions/users are in scope, the Session and Identity Contract is confirmed and identifiers are verified;
+- when Prompt Hub is in scope, the managed prompt version is read back, tested, and proven on a request;
+- credentials do not appear in source, logs, tool output, or the report.
+
+Do not report a Flow-only integration as incomplete because Watch telemetry is absent. Do not create a managed prompt merely to satisfy onboarding when the owner selected gateway-only use.
+
+## Baseline
+
+1. Preserve the application's existing provider and explicit model.
+2. Change the OpenAI-compatible base URL to `https://reiver.ai/api/gateway/v1`.
+3. Read the SDK key from `REIVER_FLOW_API_KEY`.
+4. Send stable `x-reiver-session-id` and `x-reiver-user-id` headers.
+5. Set the OpenAI-compatible `user` body field to the same stable user ID for current per-user analytics.
+6. Inspect `x-reiver-provider`, `x-reiver-model-used` and `x-request-id` on the first response.
+
+## Python pattern
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="dh_your_key",
-    base_url="https://reiver.ai/api/gateway/v1"
+    api_key=os.environ["REIVER_FLOW_API_KEY"],
+    base_url="https://reiver.ai/api/gateway/v1",
 )
 
 response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Hello!"}
-    ]
-)
-
-print(response.choices[0].message.content)
-```
-
-### Node.js / TypeScript
-
-```typescript
-import OpenAI from 'openai';
-
-const client = new OpenAI({
-  apiKey: 'dh_your_key',
-  baseURL: 'https://reiver.ai/api/gateway/v1',
-});
-
-const response = await client.chat.completions.create({
-  model: 'claude-3-5-sonnet',
-  messages: [{ role: 'user', content: 'Hello!' }],
-});
-
-console.log(response.choices[0].message.content);
-```
-
-### cURL
-
-```bash
-curl https://reiver.ai/api/gateway/v1/chat/completions \
-  -H "Authorization: Bearer dh_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
-```
-
-### Streaming
-
-Applications enable streaming by setting `stream: true`:
-
-```python
-stream = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "Tell me a story."}],
-    stream=True
-)
-
-for chunk in stream:
-    if chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="")
-```
-
-## Embeddings
-
-Applications generate vector embeddings using the same client:
-
-```python
-embedding = client.embeddings.create(
-    model="text-embedding-3-small",
-    input="Hello world"
-)
-
-print(embedding.data[0].embedding[:5])  # First 5 dimensions
-```
-
-Array input for batch embedding:
-
-```python
-embeddings = client.embeddings.create(
-    model="text-embedding-3-small",
-    input=["First document", "Second document", "Third document"]
-)
-
-for item in embeddings.data:
-    print(f"Index {item.index}: {len(item.embedding)} dimensions")
-```
-
-Supported embedding providers: OpenAI, Mistral (`mistral/mistral-embed`), Together, Fireworks, DeepInfra, Cohere, Nvidia, Azure OpenAI.
-
-## Using Other Providers
-
-The same gateway API works with any supported provider. Applications change only the model name:
-
-```python
-# Anthropic
-response = client.chat.completions.create(
-    model="claude-3-5-sonnet",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-
-# Google Gemini
-response = client.chat.completions.create(
-    model="gemini-2.0-flash",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-
-# AWS Bedrock
-response = client.chat.completions.create(
-    model="anthropic.claude-3-sonnet-20240229-v1:0",
-    messages=[{"role": "user", "content": "Hello!"}]
+    model="claude-sonnet-5",
+    user=user_id,
+    messages=messages,
+    extra_headers={
+        "x-reiver-session-id": session_id,
+        "x-reiver-user-id": user_id,
+    },
 )
 ```
 
-Flow translates the OpenAI request format to each provider's native API automatically.
+Adapt the pattern to the application's existing client abstraction instead of adding a second LLM client.
 
-## Auto Model Selection
+## Model rule
 
-Applications set the model to `"auto"` and Flow selects the best model from the project's preferred models list:
+For current Anthropic onboarding, `claude-sonnet-5` is the balanced default unless the application already relies on another current model. Leave sampling at the provider default and do not add a legacy manual thinking budget. Do not use `:batch` in an interactive request, and do not add `auto` or fallbacks until one explicit route passes.
 
-```python
-response = client.chat.completions.create(
-    model="auto",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+## Explicit session end
+
+Read `agent://flow/session-telemetry` and confirm the Session and Identity Contract first. Reiver records the first accepted request carrying a new session ID; there is no separate start call. Use the 30-minute idle evaluator only as a crash/abandonment fallback.
+
+Call:
+
+```text
+POST https://reiver.ai/api/gateway/v1/sessions/{session_id}/end
+Authorization: Bearer <REIVER_FLOW_API_KEY>
 ```
 
-The `x-reiver-model-used` response header indicates which model was selected.
+The endpoint is idempotent and returns `202` when evaluation is scheduled or already queued.
 
-## System Prompt Behavior
+## Platform management through MCP
 
-Application system prompts are preserved exactly as sent. If prompt management is later enabled via the `prompt_config` field, Flow can inject a managed system prompt when the request doesn't already include one. Requests that already contain a system message are never modified.
+- List integrations: `list` with `resource: "integrations"`.
+- Test a configured integration only when authorized: `execute` with `resource: "integration", action: "test"`.
+- Read gateway metrics: `analyze` with `analysis: "llm_overview"`.
+- Manage settings or prompts only with explicit user authorization and the relevant write scope.
 
-## Platform Management (MCP)
-
-To manage Flow configuration (provider integrations, gateway settings, prompt configs), use the MCP tools:
-
-- List integrations: `list` with `resource: 'integrations'`
-- Configure a provider (should be explicitly requested by the user): `execute` with `resource: 'integration', action: 'configure'`
-- Update gateway settings (should be explicitly requested by the user): `execute` with `resource: 'gateway', action: 'update_settings'`
+Provider keys stay in Reiver. Never request them merely to integrate application code.
