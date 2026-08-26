@@ -16,8 +16,11 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use futures::{stream, StreamExt};
+use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
+use rdkafka::client::DefaultClientContext;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::error::{KafkaError, RDKafkaErrorCode};
 use rdkafka::message::Message;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -39,6 +42,16 @@ use crate::utils::escape_clickhouse_string;
 const CONSUMER_GROUP: &str = "reiver-session-evaluator";
 const REDIS_LABELS_TTL_SECS: i64 = 300; // 5 minutes
 
+// Keep these settings aligned with deploy/gitops/infra/redpanda/create-topics-job.yaml.
+const SESSION_EVAL_TOPIC_PARTITIONS: i32 = 3;
+const SESSION_EVAL_TOPIC_REPLICATION_FACTOR: i32 = 1;
+const SESSION_EVAL_TOPIC_RETENTION_MS: &str = "604800000";
+const SESSION_EVAL_TOPIC_COMPRESSION: &str = "snappy";
+const SESSION_EVAL_TOPIC_MAX_MESSAGE_BYTES: &str = "4194304";
+const TOPIC_RETRY_INITIAL_DELAY: std::time::Duration =
+    std::time::Duration::from_millis(250);
+const TOPIC_RETRY_MAX_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
 struct KafkaConsumerContext;
 
 impl rdkafka::ClientContext for KafkaConsumerContext {
@@ -57,6 +70,17 @@ pub fn spawn(
         let kafka_hosts = &state.config.kafka_hosts;
         let client_id = state.config.kafka_client_id.as_deref();
 
+        // The GitOps topic job remains the primary cluster initializer. This
+        // idempotent application-side check covers disposable/local stacks and
+        // startup ordering where Flow can run before that job.
+        if let Err(e) = ensure_session_eval_topic(kafka_hosts, topic, client_id).await {
+            tracing::warn!(
+                topic,
+                error = %e,
+                "Could not initialize session eval topic; consumer will keep retrying"
+            );
+        }
+
         let consumer = match create_consumer(kafka_hosts, topic, client_id) {
             Ok(c) => c,
             Err(e) => {
@@ -69,6 +93,7 @@ pub fn spawn(
 
         let mut message_stream = consumer.stream();
         let mut tasks = tokio::task::JoinSet::new();
+        let mut missing_topic_retry_delay = TOPIC_RETRY_INITIAL_DELAY;
         const MAX_CONCURRENT: usize = 10;
 
         loop {
@@ -86,6 +111,7 @@ pub fn spawn(
                     let Some(message_result) = message_opt else { break; };
                     match message_result {
                         Ok(m) => {
+                            missing_topic_retry_delay = TOPIC_RETRY_INITIAL_DELAY;
                             let payload = match m.payload() {
                                 Some(p) => p,
                                 None => continue,
@@ -110,7 +136,47 @@ pub fn spawn(
                             });
                         }
                         Err(e) => {
-                            tracing::warn!(error = %e, "Kafka consumer error");
+                            let missing_topic = is_unknown_topic_error(&e);
+                            tracing::warn!(
+                                error = %e,
+                                missing_topic,
+                                "Kafka consumer error"
+                            );
+
+                            if missing_topic {
+                                if let Err(init_error) =
+                                    ensure_session_eval_topic(kafka_hosts, topic, client_id).await
+                                {
+                                    tracing::warn!(
+                                        topic,
+                                        error = %init_error,
+                                        "Session eval topic is still unavailable"
+                                    );
+                                }
+
+                                // Re-subscribe to force an immediate metadata refresh. The
+                                // stream and consumer instance stay alive; no process restart
+                                // is required when the topic appears.
+                                if let Err(subscribe_error) =
+                                    consumer.subscribe(&[topic.as_str()])
+                                {
+                                    tracing::warn!(
+                                        topic,
+                                        error = %subscribe_error,
+                                        "Failed to refresh session eval subscription"
+                                    );
+                                }
+
+                                let shutdown_requested = tokio::select! {
+                                    _ = tokio::time::sleep(missing_topic_retry_delay) => false,
+                                    _ = shutdown.changed() => true,
+                                };
+                                if shutdown_requested {
+                                    break;
+                                }
+                                missing_topic_retry_delay =
+                                    (missing_topic_retry_delay * 2).min(TOPIC_RETRY_MAX_DELAY);
+                            }
                         }
                     }
                 }
@@ -146,7 +212,12 @@ fn create_consumer(
         .set("auto.commit.interval.ms", "5000")
         .set("auto.offset.reset", "earliest")
         .set("session.timeout.ms", "30000")
-        .set("enable.partition.eof", "false");
+        .set("enable.partition.eof", "false")
+        .set("allow.auto.create.topics", "false")
+        .set("topic.metadata.refresh.interval.ms", "5000")
+        .set("topic.metadata.refresh.fast.interval.ms", "250")
+        .set("retry.backoff.ms", "250")
+        .set("retry.backoff.max.ms", "5000");
 
     if let Some(cid) = client_id {
         config.set("client.id", cid);
@@ -157,6 +228,60 @@ fn create_consumer(
 
     consumer.subscribe(&[topic])?;
     Ok(consumer)
+}
+
+fn session_eval_topic_definition(topic: &str) -> NewTopic<'_> {
+    NewTopic::new(
+        topic,
+        SESSION_EVAL_TOPIC_PARTITIONS,
+        TopicReplication::Fixed(SESSION_EVAL_TOPIC_REPLICATION_FACTOR),
+    )
+    .set("retention.ms", SESSION_EVAL_TOPIC_RETENTION_MS)
+    .set("compression.type", SESSION_EVAL_TOPIC_COMPRESSION)
+    .set("max.message.bytes", SESSION_EVAL_TOPIC_MAX_MESSAGE_BYTES)
+}
+
+async fn ensure_session_eval_topic(
+    kafka_hosts: &str,
+    topic: &str,
+    client_id: Option<&str>,
+) -> anyhow::Result<()> {
+    let mut config = ClientConfig::new();
+    config
+        .set("bootstrap.servers", kafka_hosts)
+        .set("socket.timeout.ms", "10000");
+
+    if let Some(cid) = client_id {
+        config.set("client.id", cid);
+    }
+
+    let admin: AdminClient<DefaultClientContext> = config.create()?;
+    let definition = session_eval_topic_definition(topic);
+    let options = AdminOptions::new()
+        .request_timeout(Some(std::time::Duration::from_secs(10)))
+        .operation_timeout(Some(std::time::Duration::from_secs(10)));
+
+    let result = admin
+        .create_topics([&definition], &options)
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Kafka returned no topic creation result for {topic}"))?;
+
+    match result {
+        Ok(created_topic) => {
+            tracing::info!(topic = %created_topic, "Session eval topic initialized");
+            Ok(())
+        }
+        Err((_, RDKafkaErrorCode::TopicAlreadyExists)) => Ok(()),
+        Err((returned_topic, code)) => Err(anyhow::anyhow!(
+            "Kafka topic initialization failed for {returned_topic}: {code:?}"
+        )),
+    }
+}
+
+fn is_unknown_topic_error(error: &KafkaError) -> bool {
+    error.rdkafka_error_code() == Some(RDKafkaErrorCode::UnknownTopicOrPartition)
 }
 
 /// Process a single session evaluation job.
@@ -1073,3 +1198,107 @@ async fn check_scan_allowance(
     used >= limit
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::StreamExt as _;
+    use rdkafka::mocking::MockCluster;
+    use rdkafka::producer::{FutureProducer, FutureRecord};
+
+    #[test]
+    fn session_eval_topic_definition_matches_deployment_convention() {
+        let definition = session_eval_topic_definition("reiver.session.eval.jobs");
+
+        assert_eq!(definition.num_partitions, SESSION_EVAL_TOPIC_PARTITIONS);
+        assert!(matches!(
+            &definition.replication,
+            TopicReplication::Fixed(value) if *value == SESSION_EVAL_TOPIC_REPLICATION_FACTOR
+        ));
+        assert_eq!(
+            definition.config,
+            vec![
+                ("retention.ms", SESSION_EVAL_TOPIC_RETENTION_MS),
+                ("compression.type", SESSION_EVAL_TOPIC_COMPRESSION),
+                ("max.message.bytes", SESSION_EVAL_TOPIC_MAX_MESSAGE_BYTES),
+            ]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn consumer_recovers_when_flow_starts_before_topic_and_delivers_ended_session() {
+        let cluster = MockCluster::new(1).expect("mock Kafka cluster must start");
+        let kafka_hosts = cluster.bootstrap_servers();
+        let topic = format!("reiver.session.eval.jobs.{}", Uuid::new_v4());
+        let consumer = create_consumer(&kafka_hosts, &topic, Some("session-eval-recovery-test"))
+            .expect("consumer must start before the topic exists");
+        let mut message_stream = consumer.stream();
+
+        // Drive metadata discovery while the topic is absent and prove the
+        // exact transient failure that previously stranded the consumer.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                match message_stream.next().await {
+                    Some(Err(error)) if is_unknown_topic_error(&error) => break,
+                    Some(Err(_)) => continue,
+                    Some(Ok(_)) => panic!("received a message before the topic existed"),
+                    None => panic!("consumer stream ended while the topic was absent"),
+                }
+            }
+        })
+        .await
+        .expect("consumer did not report UnknownTopicOrPartition");
+
+        cluster
+            .create_topic(&topic, SESSION_EVAL_TOPIC_PARTITIONS, 1)
+            .expect("topic must be created after the consumer starts");
+        consumer
+            .subscribe(&[topic.as_str()])
+            .expect("consumer must refresh its subscription without a restart");
+
+        let producer: FutureProducer = ClientConfig::new()
+            .set("bootstrap.servers", &kafka_hosts)
+            .create()
+            .expect("producer must connect to mock Kafka");
+
+        let expected = SessionEvalJobKafkaMessage {
+            project_id: Uuid::new_v4().to_string(),
+            session_id: "ended-session-queryable-after-recovery".to_string(),
+            enqueued_at: Utc::now().to_rfc3339(),
+        };
+        let payload = serde_json::to_string(&expected).expect("job must serialize");
+
+        producer
+            .send(
+                FutureRecord::to(&topic)
+                    .key(&expected.project_id)
+                    .payload(&payload),
+                std::time::Duration::from_secs(5),
+            )
+            .await
+            .expect("ended-session job must be published");
+
+        let delivered = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                match message_stream.next().await {
+                    Some(Ok(message)) => break message,
+                    Some(Err(error)) if is_unknown_topic_error(&error) => continue,
+                    Some(Err(error)) => {
+                        panic!("unexpected Kafka error after topic creation: {error}")
+                    }
+                    None => panic!("consumer stream ended before recovery"),
+                }
+            }
+        })
+        .await
+        .expect("consumer did not recover after the topic appeared");
+
+        // In production, delivery enters the unchanged process_job path,
+        // which writes saved_sessions — the table queried by Flow and MCP.
+        let actual: SessionEvalJobKafkaMessage =
+            serde_json::from_slice(delivered.payload().expect("job must have a payload"))
+                .expect("job payload must parse");
+        assert_eq!(actual.project_id, expected.project_id);
+        assert_eq!(actual.session_id, expected.session_id);
+        assert_eq!(actual.enqueued_at, expected.enqueued_at);
+    }
+}
