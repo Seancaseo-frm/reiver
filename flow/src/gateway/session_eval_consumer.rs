@@ -48,8 +48,7 @@ const SESSION_EVAL_TOPIC_REPLICATION_FACTOR: i32 = 1;
 const SESSION_EVAL_TOPIC_RETENTION_MS: &str = "604800000";
 const SESSION_EVAL_TOPIC_COMPRESSION: &str = "snappy";
 const SESSION_EVAL_TOPIC_MAX_MESSAGE_BYTES: &str = "4194304";
-const TOPIC_RETRY_INITIAL_DELAY: std::time::Duration =
-    std::time::Duration::from_millis(250);
+const TOPIC_RETRY_INITIAL_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
 const TOPIC_RETRY_MAX_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
 struct KafkaConsumerContext;
