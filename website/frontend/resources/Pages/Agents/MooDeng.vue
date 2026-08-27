@@ -28,7 +28,7 @@
 
       <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
 
-      <template v-else>
+      <template v-else-if="settingsLoaded">
         <BaseCard>
           <div class="p-4 space-y-4">
             <p class="text-sm text-gray-600 dark:text-gray-400">
@@ -106,18 +106,21 @@ const settings = ref({
   agent_scopes: [...DEFAULT_AGENT_SCOPES],
   auto_investigate: false,
 });
+const settingsLoaded = ref(false);
 
 const hasIntegrations = ref(true);
 let fullSettings = null;
 
 async function fetchSettings() {
   loading.value = true;
+  settingsLoaded.value = false;
   try {
     const { data } = await axios.get(`/api/projects/${projectId.value}/llm/settings`);
     fullSettings = data;
     settings.value.agent_enabled = data.agent_enabled ?? true;
     settings.value.agent_scopes = Array.isArray(data.agent_scopes) ? data.agent_scopes : [...DEFAULT_AGENT_SCOPES];
     settings.value.auto_investigate = data.auto_investigate ?? false;
+    settingsLoaded.value = true;
   } catch {
     fullSettings = {};
   } finally {
@@ -135,10 +138,11 @@ async function fetchIntegrations() {
 }
 
 async function save() {
+  if (!settingsLoaded.value) return;
   clearTimeout(saveStatusTimer);
   saveStatus.value = 'saving';
   try {
-    const payload = { ...fullSettings, ...settings.value };
+    const payload = { ...settings.value };
     await axios.put(`/api/projects/${projectId.value}/llm/settings`, payload);
     fullSettings = payload;
     saveStatus.value = 'saved';
@@ -151,7 +155,7 @@ async function save() {
 
 let debounceTimer = null;
 watch(settings, () => {
-  if (loading.value) return;
+  if (loading.value || !settingsLoaded.value) return;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(save, 800);
 }, { deep: true });

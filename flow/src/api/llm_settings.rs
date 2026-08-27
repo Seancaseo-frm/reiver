@@ -10,7 +10,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::api::{extract_organization_id, extract_project_id, extract_user_id};
@@ -384,11 +384,69 @@ fn apply_setting_row(settings: &mut LlmSettings, row: &SettingRow) {
     }
 }
 
+/// Parse a field-selective update. Missing fields are deliberately retained as
+/// absence metadata instead of being allowed to persist serde defaults.
+fn parse_settings_update(body: serde_json::Value) -> Result<(LlmSettings, HashSet<String>)> {
+    let object = body.as_object().ok_or_else(|| {
+        crate::error::AppError::Validation("settings body must be a JSON object".into())
+    })?;
+    // These Option fields already use null as their documented clear/disable value.
+    let nullable = [
+        "fallback_order",
+        "monthly_budget_usd",
+        "per_request_limit_usd",
+        "session_budget_usd",
+        "judge_sample_rate",
+        "provider_preferences",
+    ];
+    for (key, value) in object {
+        if value.is_null() && !nullable.contains(&key.as_str()) {
+            return Err(crate::error::AppError::Validation(format!(
+                "{key} cannot be null; omit it to preserve the current value"
+            )));
+        }
+    }
+    let supplied_fields = object.keys().cloned().collect();
+    let settings = serde_json::from_value(body).map_err(|error| {
+        crate::error::AppError::Validation(format!("invalid settings payload: {error}"))
+    })?;
+    Ok((settings, supplied_fields))
+}
+
+fn setting_field_for_key(key: &str) -> Option<&'static str> {
+    key.strip_prefix("gateway_").and_then(|field| match field {
+        "introspection_enabled" => Some("introspection_enabled"),
+        "thinking_budget_tokens" => Some("thinking_budget_tokens"),
+        "fallback_enabled" => Some("fallback_enabled"),
+        "fallback_order" => Some("fallback_order"),
+        "retry_enabled" => Some("retry_enabled"),
+        "retry_max_attempts" => Some("retry_max_attempts"),
+        "monthly_budget_usd" => Some("monthly_budget_usd"),
+        "budget_alert_enabled" => Some("budget_alert_enabled"),
+        "budget_hard_stop" => Some("budget_hard_stop"),
+        "per_request_limit_usd" => Some("per_request_limit_usd"),
+        "rate_limit_enabled" => Some("rate_limit_enabled"),
+        "rate_limit_rpm" => Some("rate_limit_rpm"),
+        "session_budget_usd" => Some("session_budget_usd"),
+        "guardrails" => Some("guardrails"),
+        "agent_enabled" => Some("agent_enabled"),
+        "agent_scopes" => Some("agent_scopes"),
+        "auto_investigate" => Some("auto_investigate"),
+        "judge_sample_rate" => Some("judge_sample_rate"),
+        "default_fallback_models" => Some("default_fallback_models"),
+        "provider_preferences" => Some("provider_preferences"),
+        "session_profiles" => Some("session_profiles"),
+        "session_labels" => Some("session_labels"),
+        "agent_soul" => Some("agent_soul"),
+        _ => None,
+    })
+}
+
 /// Update LLM Gateway settings for a project
 async fn update_settings(
     State(state): State<Arc<FlowState>>,
     headers: HeaderMap,
-    Json(settings): Json<LlmSettings>,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<Json<LlmSettings>> {
     let project_id = extract_project_id(&headers)?;
     let user_id = extract_user_id(&headers).ok();
@@ -396,6 +454,7 @@ async fn update_settings(
     let audit_caller = AuditCaller::from_headers(&headers);
 
     let before = internal_get_settings(state.db.as_ref(), project_id).await?;
+    let (settings, supplied_fields) = parse_settings_update(body)?;
 
     // Validate settings
     let mut errors: Vec<String> = Vec::new();
@@ -583,7 +642,12 @@ async fn update_settings(
             "gateway_agent_soul",
             serde_json::to_string(&settings.agent_soul).unwrap_or_else(|_| "{}".to_string()),
         ),
-    ];
+    ]
+    .into_iter()
+    .filter(|(key, _)| {
+        setting_field_for_key(key).is_some_and(|field| supplied_fields.contains(field))
+    })
+    .collect();
 
     // Use transaction to ensure atomicity of all settings updates
     let mut tx = state.db.begin().await?;
@@ -610,13 +674,15 @@ async fn update_settings(
     // Invalidate settings cache so the gateway picks up changes immediately
     state.introspection_settings_cache.remove(&project_id);
 
-    // Invalidate Redis-cached session labels so the consumer picks up changes immediately
-    if let Ok(mut conn) = state.redis.get().await {
-        let cache_key = format!("session_labels:{}", project_id);
-        let _ = redis::cmd("DEL")
-            .arg(&cache_key)
-            .query_async::<i64>(&mut *conn)
-            .await;
+    // Invalidate Redis-cached session labels only when labels changed.
+    if supplied_fields.contains("session_labels") {
+        if let Ok(mut conn) = state.redis.get().await {
+            let cache_key = format!("session_labels:{}", project_id);
+            let _ = redis::cmd("DEL")
+                .arg(&cache_key)
+                .query_async::<i64>(&mut *conn)
+                .await;
+        }
     }
 
     // Re-read persisted values to return the canonical state
@@ -626,6 +692,7 @@ async fn update_settings(
     let mut audit = AuditEventBuilder::new(AuditEventType::LlmSettingsUpdated)
         .project(&project_id.to_string())
         .details(serde_json::json!({
+            "updated_fields": supplied_fields,
             "before": {
                 "introspection_enabled": before.introspection_enabled,
                 "thinking_budget_tokens": before.thinking_budget_tokens,
@@ -1224,5 +1291,103 @@ mod tests {
         assert!(s.default_fallback_models.is_empty());
         assert!(s.provider_preferences.is_none());
         assert!(s.fallback_enabled);
+    }
+
+    #[test]
+    fn guardrails_only_update_selects_no_unrelated_storage_keys() {
+        let (_, fields) = parse_settings_update(serde_json::json!({
+            "guardrails": { "prompt_injection_detection": false },
+            "judge_sample_rate": 0.25
+        }))
+        .unwrap();
+        assert_eq!(fields.len(), 2);
+        assert!(fields.contains(setting_field_for_key("gateway_guardrails").unwrap()));
+        assert!(fields.contains(setting_field_for_key("gateway_judge_sample_rate").unwrap()));
+
+        for protected in [
+            "gateway_session_labels",
+            "gateway_session_profiles",
+            "gateway_agent_soul",
+            "gateway_default_fallback_models",
+            "gateway_fallback_order",
+            "gateway_provider_preferences",
+            "gateway_monthly_budget_usd",
+            "gateway_per_request_limit_usd",
+            "gateway_session_budget_usd",
+            "gateway_rate_limit_enabled",
+            "gateway_rate_limit_rpm",
+            "gateway_retry_enabled",
+            "gateway_retry_max_attempts",
+            "gateway_agent_enabled",
+            "gateway_agent_scopes",
+            "gateway_auto_investigate",
+            "gateway_introspection_enabled",
+        ] {
+            assert!(!fields.contains(setting_field_for_key(protected).unwrap()));
+        }
+    }
+
+    #[test]
+    fn explicit_empty_taxonomies_are_selected_for_intentional_clear() {
+        let (labels, label_fields) =
+            parse_settings_update(serde_json::json!({ "session_labels": [] })).unwrap();
+        assert!(labels.session_labels.is_empty());
+        assert_eq!(label_fields, HashSet::from(["session_labels".to_string()]));
+
+        let (profiles, profile_fields) =
+            parse_settings_update(serde_json::json!({ "session_profiles": [] })).unwrap();
+        assert!(profiles.session_profiles.is_empty());
+        assert_eq!(
+            profile_fields,
+            HashSet::from(["session_profiles".to_string()])
+        );
+    }
+
+    #[test]
+    fn ambiguous_null_is_rejected_but_documented_nullable_clear_is_allowed() {
+        let error =
+            parse_settings_update(serde_json::json!({ "session_labels": null })).unwrap_err();
+        assert!(
+            matches!(error, crate::error::AppError::Validation(message) if message.contains("cannot be null"))
+        );
+
+        let (settings, fields) =
+            parse_settings_update(serde_json::json!({ "monthly_budget_usd": null })).unwrap();
+        assert!(settings.monthly_budget_usd.is_none());
+        assert!(fields.contains("monthly_budget_usd"));
+    }
+
+    #[test]
+    fn complete_settings_request_selects_every_gateway_setting() {
+        let complete = serde_json::to_value(LlmSettings::default()).unwrap();
+        let (_, fields) = parse_settings_update(complete).unwrap();
+        assert_eq!(fields.len(), 23);
+        for key in [
+            "gateway_introspection_enabled",
+            "gateway_thinking_budget_tokens",
+            "gateway_fallback_enabled",
+            "gateway_fallback_order",
+            "gateway_retry_enabled",
+            "gateway_retry_max_attempts",
+            "gateway_monthly_budget_usd",
+            "gateway_budget_alert_enabled",
+            "gateway_budget_hard_stop",
+            "gateway_per_request_limit_usd",
+            "gateway_rate_limit_enabled",
+            "gateway_rate_limit_rpm",
+            "gateway_session_budget_usd",
+            "gateway_guardrails",
+            "gateway_agent_enabled",
+            "gateway_agent_scopes",
+            "gateway_auto_investigate",
+            "gateway_judge_sample_rate",
+            "gateway_default_fallback_models",
+            "gateway_provider_preferences",
+            "gateway_session_profiles",
+            "gateway_session_labels",
+            "gateway_agent_soul",
+        ] {
+            assert!(fields.contains(setting_field_for_key(key).unwrap()));
+        }
     }
 }

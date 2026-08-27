@@ -206,11 +206,15 @@ where
         }
     }
 
-    if let Some(map) = settings.as_object_mut() {
-        map.insert("project_id".to_string(), serde_json::json!(pid));
-    }
-
-    let resp = ctx.http.flow_put("/api/llm/settings", &settings).await?;
+    let profiles = settings
+        .get("session_profiles")
+        .cloned()
+        .unwrap_or(serde_json::Value::Array(vec![]));
+    let update = serde_json::json!({
+        "project_id": pid,
+        "session_profiles": profiles,
+    });
+    let resp = ctx.http.flow_put("/api/llm/settings", &update).await?;
     let updated: serde_json::Value = resp.json().await?;
     Ok(updated
         .get("session_profiles")

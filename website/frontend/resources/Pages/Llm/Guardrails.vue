@@ -43,7 +43,7 @@
         <p class="text-gray-500 dark:text-gray-400">Loading settings...</p>
       </div>
 
-      <div v-else class="max-w-3xl">
+      <div v-else-if="settingsLoaded" class="max-w-3xl">
         <!-- Tab bar -->
         <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
           <nav class="-mb-px flex gap-6" aria-label="Guardrails tabs">
@@ -310,6 +310,7 @@ import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import BaseCard from '@/components/BaseCard.vue';
 import { useAuth } from '@/composables/useAuth';
+import { canSaveSettings } from '@/utils/settingsSaveGuard';
 
 const route = useRoute();
 const { user, fetchUser } = useAuth();
@@ -355,6 +356,7 @@ const settings = ref({
   guardrails: { ...defaultGuardrails },
   judge_sample_rate: null,
 });
+const settingsLoaded = ref(false);
 const originalSettings = ref(JSON.parse(JSON.stringify(settings.value)));
 
 const guardrailTrustMode = computed({
@@ -415,6 +417,7 @@ const judgeSamplePercent = computed({
 
 const fetchSettings = async () => {
   loading.value = true;
+  settingsLoaded.value = false;
   errorMessage.value = '';
   try {
     const response = await axios.get(`/api/projects/${projectId.value}/llm/settings`);
@@ -425,6 +428,7 @@ const fetchSettings = async () => {
       judge_sample_rate: data.judge_sample_rate ?? null,
     };
     originalSettings.value = JSON.parse(JSON.stringify(settings.value));
+    settingsLoaded.value = true;
   } catch (error) {
     errorMessage.value = getErrorMessage(error, 'Failed to fetch guardrail settings');
     settings.value = { guardrails: { ...defaultGuardrails }, judge_sample_rate: null };
@@ -435,6 +439,7 @@ const fetchSettings = async () => {
 };
 
 const saveSettings = async () => {
+  if (!canSaveSettings(settingsLoaded.value, loading.value)) return;
   clearTimeout(saveStatusTimer);
   saveStatus.value = 'saving';
   errorMessage.value = '';
@@ -452,7 +457,7 @@ const saveSettings = async () => {
 
 let debounceTimer = null;
 watch(settings, () => {
-  if (loading.value) return;
+  if (!canSaveSettings(settingsLoaded.value, loading.value)) return;
   if (JSON.stringify(settings.value) === JSON.stringify(originalSettings.value)) return;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(saveSettings, 800);

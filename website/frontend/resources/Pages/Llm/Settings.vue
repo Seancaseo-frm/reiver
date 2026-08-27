@@ -43,7 +43,7 @@
         <p class="text-gray-500 dark:text-gray-400">Loading settings...</p>
       </div>
 
-      <div v-else class="max-w-3xl">
+      <div v-else-if="settingsLoaded" class="max-w-3xl">
         <!-- Tab bar -->
         <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
           <nav class="-mb-px flex gap-6" aria-label="Settings tabs">
@@ -530,6 +530,7 @@ const modelLabelsMap = computed(() => {
 });
 
 const settings = ref(JSON.parse(JSON.stringify(defaultSettings)));
+const settingsLoaded = ref(false);
 const originalSettings = ref(JSON.parse(JSON.stringify(defaultSettings)));
 const addFallbackModelId = ref('');
 
@@ -626,6 +627,7 @@ function toggleIgnoredProvider(providerId) {
 
 const fetchSettings = async () => {
   loading.value = true;
+  settingsLoaded.value = false;
   errorMessage.value = '';
   try {
     const response = await axios.get(`/api/projects/${projectId.value}/llm/settings`);
@@ -636,6 +638,7 @@ const fetchSettings = async () => {
     data.guardrails = { ...defaultGuardrails, ...(data.guardrails || {}) };
     settings.value = data;
     originalSettings.value = JSON.parse(JSON.stringify(settings.value));
+    settingsLoaded.value = true;
   } catch (error) {
     errorMessage.value = getErrorMessage(error, 'Failed to fetch settings');
     // Use defaults if fetch fails
@@ -647,11 +650,27 @@ const fetchSettings = async () => {
 };
 
 const saveSettings = async () => {
+  if (!settingsLoaded.value) return;
   clearTimeout(saveStatusTimer);
   saveStatus.value = 'saving';
   errorMessage.value = '';
   try {
-    await axios.put(`/api/projects/${projectId.value}/llm/settings`, settings.value);
+    const payload = {
+      introspection_enabled: settings.value.introspection_enabled,
+      thinking_budget_tokens: settings.value.thinking_budget_tokens,
+      fallback_enabled: settings.value.fallback_enabled,
+      retry_enabled: settings.value.retry_enabled,
+      retry_max_attempts: settings.value.retry_max_attempts,
+      monthly_budget_usd: settings.value.monthly_budget_usd,
+      budget_alert_enabled: settings.value.budget_alert_enabled,
+      budget_hard_stop: settings.value.budget_hard_stop,
+      per_request_limit_usd: settings.value.per_request_limit_usd,
+      rate_limit_enabled: settings.value.rate_limit_enabled,
+      rate_limit_rpm: settings.value.rate_limit_rpm,
+      default_fallback_models: settings.value.default_fallback_models,
+      provider_preferences: settings.value.provider_preferences,
+    };
+    await axios.put(`/api/projects/${projectId.value}/llm/settings`, payload);
     originalSettings.value = JSON.parse(JSON.stringify(settings.value));
     saveStatus.value = 'saved';
     saveStatusTimer = setTimeout(() => { saveStatus.value = 'idle'; }, 2000);
@@ -664,7 +683,7 @@ const saveSettings = async () => {
 
 let debounceTimer = null;
 watch(settings, () => {
-  if (loading.value) return;
+  if (loading.value || !settingsLoaded.value) return;
   if (JSON.stringify(settings.value) === JSON.stringify(originalSettings.value)) return;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(saveSettings, 800);

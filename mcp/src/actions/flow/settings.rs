@@ -6,10 +6,8 @@ use crate::action::{ActionContext, PlatformAction};
 use crate::actions::types::GatewaySettingsInput;
 use crate::registry::ActionRegistry;
 
-/// Recursively merge `overlay` into `base`, skipping null values.
-/// When both sides have an object for the same key, merge their fields
-/// instead of replacing the entire object (preserves nested fields the
-/// caller didn't provide).
+/// Merge a partial MCP settings object into the freshly fetched canonical
+/// settings, including partial nested guardrail objects.
 fn deep_merge(base: &mut serde_json::Value, overlay: &serde_json::Value) {
     if let (serde_json::Value::Object(base_map), serde_json::Value::Object(overlay_map)) =
         (base, overlay)
@@ -128,10 +126,8 @@ impl PlatformAction for UpdateGatewaySettings {
             .flow_get(&format!("/api/llm/settings?project_id={pid}"))
             .await?;
         let mut current: serde_json::Value = current_resp.json().await?;
-
         let patch = serde_json::to_value(&input.settings)?;
         deep_merge(&mut current, &patch);
-
         if let serde_json::Value::Object(ref mut map) = current {
             map.insert("project_id".to_string(), serde_json::json!(pid));
         }
@@ -151,7 +147,7 @@ pub fn register(registry: &mut ActionRegistry) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::deep_merge;
 
     #[test]
     fn deep_merge_skips_null_overlay_fields() {
@@ -165,10 +161,7 @@ mod tests {
         });
         deep_merge(&mut base, &overlay);
         assert_eq!(base["fallback_enabled"], false);
-        assert_eq!(
-            base["retry_enabled"], true,
-            "null overlay should not overwrite"
-        );
+        assert_eq!(base["retry_enabled"], true);
     }
 
     #[test]
@@ -189,25 +182,12 @@ mod tests {
             }
         });
         deep_merge(&mut base, &overlay);
-
-        let g = &base["guardrails"];
-        assert_eq!(g["trust_mode"], "agent", "should update provided field");
-        assert_eq!(
-            g["prompt_injection_detection"], true,
-            "null should not overwrite"
-        );
-        assert_eq!(
-            g["spotlighting_enabled"], true,
-            "missing field should be preserved"
-        );
-        assert_eq!(
-            g["block_exfiltration_urls"], true,
-            "new field should be added"
-        );
-        assert_eq!(
-            g["blocked_tools"][0], "send_email",
-            "untouched nested field preserved"
-        );
+        let guardrails = &base["guardrails"];
+        assert_eq!(guardrails["trust_mode"], "agent");
+        assert_eq!(guardrails["prompt_injection_detection"], true);
+        assert_eq!(guardrails["spotlighting_enabled"], true);
+        assert_eq!(guardrails["block_exfiltration_urls"], true);
+        assert_eq!(guardrails["blocked_tools"][0], "send_email");
     }
 
     #[test]
@@ -225,6 +205,22 @@ mod tests {
         let overlay = serde_json::json!({ "guardrails": { "trust_mode": "agent" } });
         deep_merge(&mut base, &overlay);
         assert_eq!(base["guardrails"]["trust_mode"], "agent");
+    }
+
+    #[test]
+    fn deep_merge_preserves_unsupplied_nested_guardrails() {
+        let mut current = serde_json::json!({
+            "guardrails": {
+                "prompt_injection_detection": true,
+                "blocked_tools": ["send_email"]
+            }
+        });
+        deep_merge(
+            &mut current,
+            &serde_json::json!({ "guardrails": { "prompt_injection_detection": false } }),
+        );
+        assert_eq!(current["guardrails"]["prompt_injection_detection"], false);
+        assert_eq!(current["guardrails"]["blocked_tools"][0], "send_email");
     }
 
     #[test]
