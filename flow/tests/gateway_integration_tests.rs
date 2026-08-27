@@ -186,6 +186,12 @@ async fn test_openai_non_streaming_success() {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     assert_eq!(provider_header, "openai");
+    let model_header = resp
+        .headers()
+        .get("x-reiver-model-used")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert_eq!(model_header, "gpt-4o");
 
     let body: Value = resp.json().await.unwrap();
     assert_eq!(
@@ -263,6 +269,12 @@ async fn test_openai_streaming_chunks_received() {
         content_type.contains("text/event-stream"),
         "expected text/event-stream, got {content_type}"
     );
+    let model_header = resp
+        .headers()
+        .get("x-reiver-model-used")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert_eq!(model_header, "gpt-4o");
 
     let body = resp.text().await.unwrap();
     let data_lines: Vec<&str> = body.lines().filter(|l| l.starts_with("data: ")).collect();
@@ -363,6 +375,12 @@ async fn test_fallback_on_primary_500() {
         fallback_header, "true",
         "expected x-reiver-fallback-used: true"
     );
+    let model_header = resp
+        .headers()
+        .get("x-reiver-model-used")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert_eq!(model_header, "claude-3-5-sonnet-20241022");
 
     let body: Value = resp.json().await.unwrap();
     assert_eq!(
@@ -445,6 +463,12 @@ async fn test_anthropic_non_streaming_success() {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     assert_eq!(provider_header, "anthropic");
+    let model_header = resp
+        .headers()
+        .get("x-reiver-model-used")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert_eq!(model_header, "claude-3-5-sonnet-20241022");
 
     let body: Value = resp.json().await.unwrap();
     assert_eq!(

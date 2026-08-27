@@ -443,13 +443,31 @@ async fn chat_completions_inner(
         });
     }
 
+    // Keep the effective request, cache decision, and observability record in
+    // agreement with Anthropic. These model families reject non-default
+    // sampling fields, so the provider adapter will not send them.
+    if provider == Provider::Anthropic
+        && crate::gateway::providers::anthropic::uses_provider_managed_sampling(&request.model)
+    {
+        if request.temperature.is_some() || request.top_p.is_some() {
+            tracing::debug!(
+                model = %request.model,
+                "Removed sampling parameters unsupported by this Anthropic model"
+            );
+        }
+        request.temperature = None;
+        request.top_p = None;
+    }
+
     // Apply spotlighting: wrap untrusted-role messages in delimiters
     crate::gateway::guardrails::apply_spotlighting(&settings.guardrail_config, &mut request);
 
     let input_pii_detected = mask_request_pii(&state, project_id, &mut request).await;
 
     if !settings.guardrail_config.is_noop() {
-        use crate::gateway::guardrails::{check_input_guardrails, report_input_guardrail_violation};
+        use crate::gateway::guardrails::{
+            check_input_guardrails, report_input_guardrail_violation,
+        };
         if let Some(violation) =
             check_input_guardrails(&settings.guardrail_config, &request, input_pii_detected)
         {
@@ -639,6 +657,7 @@ async fn chat_completions_inner(
             );
 
             // Return cached response with cache header
+            let cached_model = cached.response.model.clone();
             let mut resp = Json(cached.response).into_response();
             resp.headers_mut().insert(
                 HeaderName::from_static("x-reiver-cache"),
@@ -647,6 +666,10 @@ async fn chat_completions_inner(
             resp.headers_mut().insert(
                 HeaderName::from_static("x-reiver-provider"),
                 header_value(provider_name, "unknown"),
+            );
+            resp.headers_mut().insert(
+                HeaderName::from_static("x-reiver-model-used"),
+                header_value(&cached_model, "unknown"),
             );
             resp.headers_mut().insert(
                 HeaderName::from_static("x-request-id"),
@@ -684,6 +707,10 @@ async fn chat_completions_inner(
                 HeaderName::from_static("x-reiver-provider"),
                 header_value(fb_result.provider_used.as_str(), "unknown"),
             ));
+            headers.push((
+                HeaderName::from_static("x-reiver-model-used"),
+                header_value(&fb_result.model_used, "unknown"),
+            ));
             if fb_result.fallback_used {
                 headers.push((
                     HeaderName::from_static("x-reiver-fallback-used"),
@@ -692,10 +719,6 @@ async fn chat_completions_inner(
                 headers.push((
                     HeaderName::from_static("x-reiver-original-model"),
                     header_value(&request.model, "unknown"),
-                ));
-                headers.push((
-                    HeaderName::from_static("x-reiver-model-used"),
-                    header_value(&fb_result.model_used, "unknown"),
                 ));
             }
             if fb_result.retry_count > 0 {
