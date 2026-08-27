@@ -34,6 +34,8 @@ mod enforcement {
                     requests_per_month: 2_000_000,
                     fee_percent: Decimal::new(1, 2),
                     moodeng_fee_percent: Decimal::new(5, 2),
+                    agent_credits_included: -1,
+                    agent_credit_overage_usd: Decimal::ZERO,
                 },
                 prompt_hub: reiver_core::entitlements::types::PromptHubConfig {
                     enabled: true,
@@ -46,11 +48,14 @@ mod enforcement {
                     max_parallel_rollouts: 50,
                     max_session_profiles: 50,
                     max_labels: 500,
+                    session_evals_included: -1,
+                    session_eval_overage_usd: Decimal::ZERO,
                 },
                 watch: reiver_core::entitlements::types::WatchConfig {
                     enabled: true,
                     webhook_alerts: true,
                     slack_alerts: true,
+                    ingestion_gb_included: -1,
                     traces_logs_per_gb_usd: Decimal::new(20, 2),
                     metrics_per_million_usd: Decimal::new(10, 2),
                 },
@@ -77,6 +82,8 @@ mod enforcement {
                     requests_per_month: 50_000,
                     fee_percent: Decimal::ZERO,
                     moodeng_fee_percent: Decimal::ZERO,
+                    agent_credits_included: -1,
+                    agent_credit_overage_usd: Decimal::ZERO,
                 },
                 prompt_hub: reiver_core::entitlements::types::PromptHubConfig {
                     enabled: true,
@@ -89,6 +96,8 @@ mod enforcement {
                     max_parallel_rollouts: 1,
                     max_session_profiles: 1,
                     max_labels: 5,
+                    session_evals_included: -1,
+                    session_eval_overage_usd: Decimal::ZERO,
                 },
                 watch: reiver_core::entitlements::types::WatchConfig::default(),
                 herd: reiver_core::entitlements::types::HerdConfig {
