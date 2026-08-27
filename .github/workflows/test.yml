@@ -2,6 +2,7 @@
 name: Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -11,6 +12,43 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  rustfmt:
+    name: Rustfmt changed Rust files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check changed Rust files
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+          elif [[ -n "$PUSH_BEFORE_SHA" ]] && [[ ! "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
+            base_sha="$PUSH_BEFORE_SHA"
+          else
+            base_sha="HEAD^"
+          fi
+
+          mapfile -d '' changed_rust_files < <(
+            git diff --name-only --diff-filter=ACMR -z "$base_sha" HEAD -- '*.rs'
+          )
+
+          if (( ${#changed_rust_files[@]} == 0 )); then
+            echo "No changed Rust files."
+            exit 0
+          fi
+
+          rustfmt --edition 2021 --check --config skip_children=true "${changed_rust_files[@]}"
+
   # Detect which projects changed to avoid building everything
   changes:
     name: Detect Changes
@@ -21,6 +59,8 @@ jobs:
       watch: ${{ steps.filter.outputs.watch }}
       flow: ${{ steps.filter.outputs.flow }}
       pond: ${{ steps.filter.outputs.pond }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -41,6 +81,16 @@ jobs:
             pond:
               - 'pond/**'
               - 'core/**'
+            mcp:
+              - 'mcp/**'
+              - 'core/**'
+            docs:
+              - 'docs/**'
+              - 'website/frontend/public/llms.txt'
+              - 'website/frontend/public/llms-full.txt'
+              - 'deploy/docker/Dockerfile.docs'
+              - 'deploy/docker/nginx-docs.conf'
+              - 'deploy/scripts/verify-onboarding-surfaces.sh'
 
   test-core:
     name: Test Core
@@ -74,6 +124,11 @@ jobs:
     if: needs.changes.outputs.website == 'true'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/frontend/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -91,6 +146,10 @@ jobs:
       - name: Test
         run: cargo test --all-features
         working-directory: website
+
+      - name: Build frontend
+        run: npm ci && npm run build
+        working-directory: website/frontend
 
   test-watch:
     name: Test Watch
@@ -166,3 +225,75 @@ jobs:
       - name: Test
         run: cargo test --all-features
         working-directory: pond
+
+  test-mcp:
+    name: Test MCP
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mcp
+
+      - name: Install xmlsec dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
+      - name: Verify embedded agent documentation
+        run: node scripts/verify-agent-docs.mjs
+        working-directory: mcp
+
+      - name: Check
+        run: cargo check --all-features
+        working-directory: mcp
+
+      - name: Test
+        run: cargo test --all-features
+        working-directory: mcp
+
+  test-docs:
+    name: Test Documentation
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Build and verify links
+        run: npm ci && npm run verify
+        working-directory: docs
+
+      - name: Check deployment verifier syntax
+        run: bash -n deploy/scripts/verify-onboarding-surfaces.sh
+
+      - name: Verify clean URLs in the production docs image
+        run: |
+          mkdir -p output/docs-dist
+          cp -r docs/.vitepress/dist/. output/docs-dist/
+          docker build --file deploy/docker/Dockerfile.docs --tag reiver-docs-test .
+          container_id="$(docker run --detach --publish 127.0.0.1:8080:80 reiver-docs-test)"
+          trap 'docker rm --force "$container_id" >/dev/null' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8080/quickstart >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == "20" ]]; then
+              echo "Docs container did not become ready" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+          curl --fail --silent http://127.0.0.1:8080/legal/privacy >/dev/null
+          curl --fail --silent http://127.0.0.1:8080/llms.txt >/dev/null
