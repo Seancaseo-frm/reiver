@@ -68,23 +68,30 @@ jobs:
         with:
           filters: |
             core:
+              - '.github/workflows/test.yml'
               - 'core/**'
             website:
+              - '.github/workflows/test.yml'
               - 'website/**'
               - 'core/**'
             watch:
+              - '.github/workflows/test.yml'
               - 'watch/**'
               - 'core/**'
             flow:
+              - '.github/workflows/test.yml'
               - 'flow/**'
               - 'core/**'
             pond:
+              - '.github/workflows/test.yml'
               - 'pond/**'
               - 'core/**'
             mcp:
+              - '.github/workflows/test.yml'
               - 'mcp/**'
               - 'core/**'
             docs:
+              - '.github/workflows/test.yml'
               - 'docs/**'
               - 'website/frontend/public/llms.txt'
               - 'website/frontend/public/llms-full.txt'
@@ -107,7 +114,7 @@ jobs:
       - name: Install xmlsec dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl libcurl4-openssl-dev
 
       - name: Check
         run: cargo check --all-features
@@ -137,7 +144,7 @@ jobs:
       - name: Install xmlsec dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl libcurl4-openssl-dev
 
       - name: Check
         run: cargo check --all-features
@@ -166,7 +173,7 @@ jobs:
       - name: Install xmlsec dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl libcurl4-openssl-dev
 
       - name: Check
         run: cargo check --all-features
@@ -191,7 +198,7 @@ jobs:
       - name: Install xmlsec dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl libcurl4-openssl-dev
 
       - name: Check
         run: cargo check --all-features
@@ -216,7 +223,7 @@ jobs:
       - name: Install xmlsec dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl libcurl4-openssl-dev
 
       - name: Check
         run: cargo check --all-features
@@ -244,7 +251,7 @@ jobs:
       - name: Install xmlsec dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl libcurl4-openssl-dev
 
       - name: Verify embedded agent documentation
         run: node scripts/verify-agent-docs.mjs
