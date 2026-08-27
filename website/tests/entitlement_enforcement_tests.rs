@@ -7,11 +7,9 @@
 #[cfg(feature = "test-utils")]
 mod enforcement {
     use reiver_core::entitlements::checker::EntitlementChecker;
-    use reiver_core::entitlements::types::{
-        Product, ResolvedTier, TierConfig,
-    };
-    use rust_decimal::Decimal;
+    use reiver_core::entitlements::types::{Product, ResolvedTier, TierConfig};
     use reiver_core::entitlements::MockEntitlementChecker;
+    use rust_decimal::Decimal;
     use uuid::Uuid;
 
     fn test_org() -> Uuid {
@@ -59,9 +57,7 @@ mod enforcement {
                     traces_logs_per_gb_usd: Decimal::new(20, 2),
                     metrics_per_million_usd: Decimal::new(10, 2),
                 },
-                herd: reiver_core::entitlements::types::HerdConfig {
-                    enabled: true,
-                },
+                herd: reiver_core::entitlements::types::HerdConfig { enabled: true },
             },
         }
     }
@@ -100,9 +96,7 @@ mod enforcement {
                     session_eval_overage_usd: Decimal::ZERO,
                 },
                 watch: reiver_core::entitlements::types::WatchConfig::default(),
-                herd: reiver_core::entitlements::types::HerdConfig {
-                    enabled: true,
-                },
+                herd: reiver_core::entitlements::types::HerdConfig { enabled: true },
             },
         }
     }
@@ -116,7 +110,10 @@ mod enforcement {
         mock.set_tier(org, free_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(!tier.config.is_product_enabled(Product::Watch), "Watch should be denied on free tier");
+        assert!(
+            !tier.config.is_product_enabled(Product::Watch),
+            "Watch should be denied on free tier"
+        );
     }
 
     #[tokio::test]
@@ -126,7 +123,10 @@ mod enforcement {
         mock.set_tier(org, full_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(tier.config.is_product_enabled(Product::Watch), "Watch should be allowed on scale tier");
+        assert!(
+            tier.config.is_product_enabled(Product::Watch),
+            "Watch should be allowed on scale tier"
+        );
     }
 
     #[tokio::test]
@@ -136,7 +136,10 @@ mod enforcement {
         mock.set_tier(org, free_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(tier.config.is_product_enabled(Product::Herd), "Herd should be allowed on free tier");
+        assert!(
+            tier.config.is_product_enabled(Product::Herd),
+            "Herd should be allowed on free tier"
+        );
     }
 
     #[tokio::test]
@@ -146,7 +149,10 @@ mod enforcement {
         mock.set_tier(org, free_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(tier.config.is_product_enabled(Product::PromptHub), "PromptHub should be allowed on free tier");
+        assert!(
+            tier.config.is_product_enabled(Product::PromptHub),
+            "PromptHub should be allowed on free tier"
+        );
     }
 
     // ── Feature enforcement (SSO) ────────────────────────────────────────
@@ -158,7 +164,10 @@ mod enforcement {
         mock.set_tier(org, free_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(!tier.config.platform.sso, "SSO should be denied on free tier");
+        assert!(
+            !tier.config.platform.sso,
+            "SSO should be denied on free tier"
+        );
     }
 
     #[tokio::test]
@@ -168,7 +177,10 @@ mod enforcement {
         mock.set_tier(org, full_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(tier.config.platform.sso, "SSO should be allowed on scale tier");
+        assert!(
+            tier.config.platform.sso,
+            "SSO should be allowed on scale tier"
+        );
     }
 
     // ── Feature enforcement (Audit Log) ──────────────────────────────────
@@ -180,7 +192,10 @@ mod enforcement {
         mock.set_tier(org, free_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(!tier.config.platform.audit_log, "AuditLog should be denied on free tier");
+        assert!(
+            !tier.config.platform.audit_log,
+            "AuditLog should be denied on free tier"
+        );
     }
 
     #[tokio::test]
@@ -190,7 +205,10 @@ mod enforcement {
         mock.set_tier(org, full_tier()).await;
 
         let tier = mock.get_config(org).await.unwrap();
-        assert!(tier.config.platform.audit_log, "AuditLog should be allowed on scale tier");
+        assert!(
+            tier.config.platform.audit_log,
+            "AuditLog should be allowed on scale tier"
+        );
     }
 
     // ── Quota enforcement (MaxProjects) ──────────────────────────────────
@@ -204,7 +222,10 @@ mod enforcement {
         let tier = mock.get_config(org).await.unwrap();
         let limit = tier.config.platform.max_projects;
         let current = 1i64;
-        assert!(limit >= 0 && current >= limit, "Should deny when at max_projects limit");
+        assert!(
+            limit >= 0 && current >= limit,
+            "Should deny when at max_projects limit"
+        );
     }
 
     #[tokio::test]
@@ -216,7 +237,10 @@ mod enforcement {
         let tier = mock.get_config(org).await.unwrap();
         let limit = tier.config.platform.max_projects;
         let current = 0i64;
-        assert!(limit < 0 || current < limit, "Should allow when under max_projects limit");
+        assert!(
+            limit < 0 || current < limit,
+            "Should allow when under max_projects limit"
+        );
     }
 
     #[tokio::test]
@@ -286,7 +310,10 @@ mod enforcement {
         mock.set_tier(org, tier).await;
 
         let result = mock.get_config(org).await.unwrap();
-        assert!(result.config.platform.sso, "SSO override should grant access on free tier");
+        assert!(
+            result.config.platform.sso,
+            "SSO override should grant access on free tier"
+        );
     }
 
     #[tokio::test]
@@ -299,7 +326,10 @@ mod enforcement {
         mock.set_tier(org, tier).await;
 
         let result = mock.get_config(org).await.unwrap();
-        assert!(result.config.is_product_enabled(Product::Watch), "Watch override should grant access on free tier");
+        assert!(
+            result.config.is_product_enabled(Product::Watch),
+            "Watch override should grant access on free tier"
+        );
     }
 
     // ── Unknown org returns error ────────────────────────────────────────
@@ -383,6 +413,10 @@ mod enforcement {
         let mock = MockEntitlementChecker::new();
         let unknown = Uuid::new_v4();
 
-        assert!(reiver_core::billing::credits::get_gateway_fee_rate(&mock, unknown).await.is_err());
+        assert!(
+            reiver_core::billing::credits::get_gateway_fee_rate(&mock, unknown)
+                .await
+                .is_err()
+        );
     }
 }
