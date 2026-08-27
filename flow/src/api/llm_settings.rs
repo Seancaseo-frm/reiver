@@ -399,14 +399,19 @@ fn parse_settings_update(body: serde_json::Value) -> Result<(LlmSettings, HashSe
         "judge_sample_rate",
         "provider_preferences",
     ];
+    let mut supplied_fields = HashSet::new();
     for (key, value) in object {
-        if value.is_null() && !nullable.contains(&key.as_str()) {
+        let storage_key = format!("gateway_{key}");
+        let Some(field) = setting_field_for_key(&storage_key) else {
+            continue;
+        };
+        if value.is_null() && !nullable.contains(&field) {
             return Err(crate::error::AppError::Validation(format!(
                 "{key} cannot be null; omit it to preserve the current value"
             )));
         }
+        supplied_fields.insert(field.to_string());
     }
-    let supplied_fields = object.keys().cloned().collect();
     let settings = serde_json::from_value(body).map_err(|error| {
         crate::error::AppError::Validation(format!("invalid settings payload: {error}"))
     })?;
@@ -440,6 +445,119 @@ fn setting_field_for_key(key: &str) -> Option<&'static str> {
         "agent_soul" => Some("agent_soul"),
         _ => None,
     })
+}
+
+fn build_settings_updates(
+    settings: &LlmSettings,
+    supplied_fields: &HashSet<String>,
+) -> Vec<(&'static str, String)> {
+    let candidates = vec![
+        (
+            "gateway_introspection_enabled",
+            settings.introspection_enabled.to_string(),
+        ),
+        (
+            "gateway_thinking_budget_tokens",
+            settings.thinking_budget_tokens.to_string(),
+        ),
+        (
+            "gateway_fallback_enabled",
+            settings.fallback_enabled.to_string(),
+        ),
+        (
+            "gateway_fallback_order",
+            serde_json::to_string(&settings.fallback_order).unwrap_or_default(),
+        ),
+        ("gateway_retry_enabled", settings.retry_enabled.to_string()),
+        (
+            "gateway_retry_max_attempts",
+            settings.retry_max_attempts.to_string(),
+        ),
+        (
+            "gateway_monthly_budget_usd",
+            settings
+                .monthly_budget_usd
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            "gateway_budget_alert_enabled",
+            settings.budget_alert_enabled.to_string(),
+        ),
+        (
+            "gateway_budget_hard_stop",
+            settings.budget_hard_stop.to_string(),
+        ),
+        (
+            "gateway_per_request_limit_usd",
+            settings
+                .per_request_limit_usd
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            "gateway_rate_limit_enabled",
+            settings.rate_limit_enabled.to_string(),
+        ),
+        (
+            "gateway_rate_limit_rpm",
+            settings.rate_limit_rpm.to_string(),
+        ),
+        (
+            "gateway_session_budget_usd",
+            settings
+                .session_budget_usd
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            "gateway_guardrails",
+            serde_json::to_string(&settings.guardrails).unwrap_or_default(),
+        ),
+        ("gateway_agent_enabled", settings.agent_enabled.to_string()),
+        (
+            "gateway_agent_scopes",
+            serde_json::to_string(&settings.agent_scopes).unwrap_or_default(),
+        ),
+        (
+            "gateway_auto_investigate",
+            settings.auto_investigate.to_string(),
+        ),
+        (
+            "gateway_judge_sample_rate",
+            settings
+                .judge_sample_rate
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            "gateway_default_fallback_models",
+            serde_json::to_string(&settings.default_fallback_models).unwrap_or_default(),
+        ),
+        (
+            "gateway_provider_preferences",
+            serde_json::to_string(&settings.provider_preferences)
+                .unwrap_or_else(|_| "null".to_string()),
+        ),
+        (
+            "gateway_session_profiles",
+            serde_json::to_string(&settings.session_profiles).unwrap_or_else(|_| "[]".to_string()),
+        ),
+        (
+            "gateway_session_labels",
+            serde_json::to_string(&settings.session_labels).unwrap_or_else(|_| "[]".to_string()),
+        ),
+        (
+            "gateway_agent_soul",
+            serde_json::to_string(&settings.agent_soul).unwrap_or_else(|_| "{}".to_string()),
+        ),
+    ];
+    candidates
+        .into_iter()
+        .filter(|(key, _)| {
+            setting_field_for_key(key).is_some_and(|field| supplied_fields.contains(field))
+        })
+        .collect()
 }
 
 /// Update LLM Gateway settings for a project
@@ -541,113 +659,7 @@ async fn update_settings(
         return Err(crate::error::AppError::Validation(errors.join("; ")));
     }
 
-    // Build settings map
-    let settings_map: Vec<(&str, String)> = vec![
-        (
-            "gateway_introspection_enabled",
-            settings.introspection_enabled.to_string(),
-        ),
-        (
-            "gateway_thinking_budget_tokens",
-            settings.thinking_budget_tokens.to_string(),
-        ),
-        (
-            "gateway_fallback_enabled",
-            settings.fallback_enabled.to_string(),
-        ),
-        (
-            "gateway_fallback_order",
-            serde_json::to_string(&settings.fallback_order).unwrap_or_default(),
-        ),
-        ("gateway_retry_enabled", settings.retry_enabled.to_string()),
-        (
-            "gateway_retry_max_attempts",
-            settings.retry_max_attempts.to_string(),
-        ),
-        (
-            "gateway_monthly_budget_usd",
-            settings
-                .monthly_budget_usd
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-        ),
-        (
-            "gateway_budget_alert_enabled",
-            settings.budget_alert_enabled.to_string(),
-        ),
-        (
-            "gateway_budget_hard_stop",
-            settings.budget_hard_stop.to_string(),
-        ),
-        (
-            "gateway_per_request_limit_usd",
-            settings
-                .per_request_limit_usd
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-        ),
-        (
-            "gateway_rate_limit_enabled",
-            settings.rate_limit_enabled.to_string(),
-        ),
-        (
-            "gateway_rate_limit_rpm",
-            settings.rate_limit_rpm.to_string(),
-        ),
-        (
-            "gateway_session_budget_usd",
-            settings
-                .session_budget_usd
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-        ),
-        (
-            "gateway_guardrails",
-            serde_json::to_string(&settings.guardrails).unwrap_or_default(),
-        ),
-        ("gateway_agent_enabled", settings.agent_enabled.to_string()),
-        (
-            "gateway_agent_scopes",
-            serde_json::to_string(&settings.agent_scopes).unwrap_or_default(),
-        ),
-        (
-            "gateway_auto_investigate",
-            settings.auto_investigate.to_string(),
-        ),
-        (
-            "gateway_judge_sample_rate",
-            settings
-                .judge_sample_rate
-                .map(|v| v.to_string())
-                .unwrap_or_default(),
-        ),
-        (
-            "gateway_default_fallback_models",
-            serde_json::to_string(&settings.default_fallback_models).unwrap_or_default(),
-        ),
-        (
-            "gateway_provider_preferences",
-            serde_json::to_string(&settings.provider_preferences)
-                .unwrap_or_else(|_| "null".to_string()),
-        ),
-        (
-            "gateway_session_profiles",
-            serde_json::to_string(&settings.session_profiles).unwrap_or_else(|_| "[]".to_string()),
-        ),
-        (
-            "gateway_session_labels",
-            serde_json::to_string(&settings.session_labels).unwrap_or_else(|_| "[]".to_string()),
-        ),
-        (
-            "gateway_agent_soul",
-            serde_json::to_string(&settings.agent_soul).unwrap_or_else(|_| "{}".to_string()),
-        ),
-    ]
-    .into_iter()
-    .filter(|(key, _)| {
-        setting_field_for_key(key).is_some_and(|field| supplied_fields.contains(field))
-    })
-    .collect();
+    let settings_map = build_settings_updates(&settings, &supplied_fields);
 
     // Use transaction to ensure atomicity of all settings updates
     let mut tx = state.db.begin().await?;
@@ -1115,6 +1127,46 @@ async fn internal_get_settings(
 mod tests {
     use super::*;
 
+    const ALL_GATEWAY_KEYS: [&str; 23] = [
+        "gateway_introspection_enabled",
+        "gateway_thinking_budget_tokens",
+        "gateway_fallback_enabled",
+        "gateway_fallback_order",
+        "gateway_retry_enabled",
+        "gateway_retry_max_attempts",
+        "gateway_monthly_budget_usd",
+        "gateway_budget_alert_enabled",
+        "gateway_budget_hard_stop",
+        "gateway_per_request_limit_usd",
+        "gateway_rate_limit_enabled",
+        "gateway_rate_limit_rpm",
+        "gateway_session_budget_usd",
+        "gateway_guardrails",
+        "gateway_agent_enabled",
+        "gateway_agent_scopes",
+        "gateway_auto_investigate",
+        "gateway_judge_sample_rate",
+        "gateway_default_fallback_models",
+        "gateway_provider_preferences",
+        "gateway_session_profiles",
+        "gateway_session_labels",
+        "gateway_agent_soul",
+    ];
+
+    fn recognizable_store() -> HashMap<String, String> {
+        ALL_GATEWAY_KEYS
+            .iter()
+            .map(|key| (key.to_string(), format!("recognizable-before:{key}")))
+            .collect()
+    }
+
+    fn apply_selected_updates(store: &mut HashMap<String, String>, body: serde_json::Value) {
+        let (settings, fields) = parse_settings_update(body).unwrap();
+        for (key, value) in build_settings_updates(&settings, &fields) {
+            store.insert(key.to_string(), value);
+        }
+    }
+
     fn row(key: &str, value: &str) -> SettingRow {
         SettingRow {
             key: key.to_string(),
@@ -1389,5 +1441,62 @@ mod tests {
         ] {
             assert!(fields.contains(setting_field_for_key(key).unwrap()));
         }
+    }
+
+    #[test]
+    fn final_storage_selection_preserves_all_unsupplied_settings() {
+        let mut store = recognizable_store();
+        let before = store.clone();
+        apply_selected_updates(
+            &mut store,
+            serde_json::json!({
+                "guardrails": { "prompt_injection_detection": true },
+                "judge_sample_rate": 0.75
+            }),
+        );
+
+        assert_ne!(store["gateway_guardrails"], before["gateway_guardrails"]);
+        assert_eq!(store["gateway_judge_sample_rate"], "0.75");
+        for key in ALL_GATEWAY_KEYS {
+            if !matches!(key, "gateway_guardrails" | "gateway_judge_sample_rate") {
+                assert_eq!(store[key], before[key], "{key} must be preserved");
+            }
+        }
+    }
+
+    #[test]
+    fn final_storage_selection_clears_labels_only() {
+        let mut store = recognizable_store();
+        let before = store.clone();
+        apply_selected_updates(&mut store, serde_json::json!({ "session_labels": [] }));
+        assert_eq!(store["gateway_session_labels"], "[]");
+        for key in ALL_GATEWAY_KEYS {
+            if key != "gateway_session_labels" {
+                assert_eq!(store[key], before[key], "{key} must be preserved");
+            }
+        }
+    }
+
+    #[test]
+    fn final_storage_selection_clears_profiles_only() {
+        let mut store = recognizable_store();
+        let before = store.clone();
+        apply_selected_updates(&mut store, serde_json::json!({ "session_profiles": [] }));
+        assert_eq!(store["gateway_session_profiles"], "[]");
+        for key in ALL_GATEWAY_KEYS {
+            if key != "gateway_session_profiles" {
+                assert_eq!(store[key], before[key], "{key} must be preserved");
+            }
+        }
+    }
+
+    #[test]
+    fn audit_field_selection_excludes_transport_metadata() {
+        let (_, fields) = parse_settings_update(serde_json::json!({
+            "project_id": "00000000-0000-0000-0000-000000000001",
+            "guardrails": { "prompt_injection_detection": true }
+        }))
+        .unwrap();
+        assert_eq!(fields, HashSet::from(["guardrails".to_string()]));
     }
 }
