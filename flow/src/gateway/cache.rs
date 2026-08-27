@@ -475,12 +475,21 @@ struct CacheInvalidateRequest {
 ///
 /// Some requests should not be cached:
 /// - Streaming requests (responses are chunked)
+/// - Models that reject temperature controls (a requested `temperature: 0`
+///   cannot make those responses deterministic)
 /// - Requests without an explicit `temperature: 0` (providers default to
 ///   temperature 1.0 which is non-deterministic)
 /// - Requests with tools (function calling may have side effects)
 pub fn is_cacheable(request: &ChatCompletionRequest) -> bool {
     // Don't cache streaming requests
     if request.stream.unwrap_or(false) {
+        return false;
+    }
+
+    // Recent Claude models reject sampling controls. The Anthropic adapter
+    // omits them, so a caller-supplied temperature of zero is not evidence of
+    // deterministic output and must not activate semantic caching.
+    if crate::gateway::providers::anthropic::uses_provider_managed_sampling(&request.model) {
         return false;
     }
 
@@ -544,6 +553,23 @@ mod tests {
         let mut request = create_test_request("gpt-4o", "Hello");
         request.temperature = Some(0.7);
         assert!(!is_cacheable(&request));
+    }
+
+    #[test]
+    fn test_provider_managed_sampling_models_are_not_cacheable() {
+        for model in [
+            "claude-sonnet-5",
+            "claude-opus-5",
+            "claude-opus-4.8-fast",
+            "claude-fable-5",
+        ] {
+            let mut request = create_test_request(model, "Hello");
+            request.temperature = Some(0.0);
+            assert!(
+                !is_cacheable(&request),
+                "{model} must not be cached based on a temperature it rejects"
+            );
+        }
     }
 
     /// Regression: negative temperature must NOT be treated as cacheable.

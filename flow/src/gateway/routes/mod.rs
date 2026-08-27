@@ -120,10 +120,9 @@ async fn end_session(
 
     let pid = project_id.to_string();
 
-    let reserved = crate::gateway::session_evaluator::try_reserve_session(
-        &state.redis, &pid, &session_id,
-    )
-    .await;
+    let reserved =
+        crate::gateway::session_evaluator::try_reserve_session(&state.redis, &pid, &session_id)
+            .await;
 
     if !reserved {
         return Ok((
@@ -443,13 +442,31 @@ async fn chat_completions_inner(
         });
     }
 
+    // Keep the effective request, cache decision, and observability record in
+    // agreement with Anthropic. These model families reject non-default
+    // sampling fields, so the provider adapter will not send them.
+    if provider == Provider::Anthropic
+        && crate::gateway::providers::anthropic::uses_provider_managed_sampling(&request.model)
+    {
+        if request.temperature.is_some() || request.top_p.is_some() {
+            tracing::debug!(
+                model = %request.model,
+                "Removed sampling parameters unsupported by this Anthropic model"
+            );
+        }
+        request.temperature = None;
+        request.top_p = None;
+    }
+
     // Apply spotlighting: wrap untrusted-role messages in delimiters
     crate::gateway::guardrails::apply_spotlighting(&settings.guardrail_config, &mut request);
 
     let input_pii_detected = mask_request_pii(&state, project_id, &mut request).await;
 
     if !settings.guardrail_config.is_noop() {
-        use crate::gateway::guardrails::{check_input_guardrails, report_input_guardrail_violation};
+        use crate::gateway::guardrails::{
+            check_input_guardrails, report_input_guardrail_violation,
+        };
         if let Some(violation) =
             check_input_guardrails(&settings.guardrail_config, &request, input_pii_detected)
         {
@@ -496,7 +513,8 @@ async fn chat_completions_inner(
     .await?;
 
     let org_id = state.get_organization_id(billing_pid).await.unwrap_or(None);
-    ctx.check_billing_gates(&state, org_id, is_platform_key).await?;
+    ctx.check_billing_gates(&state, org_id, is_platform_key)
+        .await?;
 
     let mut is_streaming = request.stream.unwrap_or(false);
 
@@ -639,6 +657,7 @@ async fn chat_completions_inner(
             );
 
             // Return cached response with cache header
+            let cached_model = cached.response.model.clone();
             let mut resp = Json(cached.response).into_response();
             resp.headers_mut().insert(
                 HeaderName::from_static("x-reiver-cache"),
@@ -647,6 +666,10 @@ async fn chat_completions_inner(
             resp.headers_mut().insert(
                 HeaderName::from_static("x-reiver-provider"),
                 header_value(provider_name, "unknown"),
+            );
+            resp.headers_mut().insert(
+                HeaderName::from_static("x-reiver-model-used"),
+                header_value(&cached_model, "unknown"),
             );
             resp.headers_mut().insert(
                 HeaderName::from_static("x-request-id"),
@@ -684,6 +707,10 @@ async fn chat_completions_inner(
                 HeaderName::from_static("x-reiver-provider"),
                 header_value(fb_result.provider_used.as_str(), "unknown"),
             ));
+            headers.push((
+                HeaderName::from_static("x-reiver-model-used"),
+                header_value(&fb_result.model_used, "unknown"),
+            ));
             if fb_result.fallback_used {
                 headers.push((
                     HeaderName::from_static("x-reiver-fallback-used"),
@@ -692,10 +719,6 @@ async fn chat_completions_inner(
                 headers.push((
                     HeaderName::from_static("x-reiver-original-model"),
                     header_value(&request.model, "unknown"),
-                ));
-                headers.push((
-                    HeaderName::from_static("x-reiver-model-used"),
-                    header_value(&fb_result.model_used, "unknown"),
                 ));
             }
             if fb_result.retry_count > 0 {
@@ -913,12 +936,9 @@ fn emit_project_cache_hit(
     labels.insert("gen_ai.provider.name".into(), provider.to_string());
     labels.insert("gen_ai.request.model".into(), model.to_string());
 
-    state.otel_publisher.emit_counter(
-        project_id,
-        "gen_ai.client.cache.hit",
-        1.0,
-        labels.clone(),
-    );
+    state
+        .otel_publisher
+        .emit_counter(project_id, "gen_ai.client.cache.hit", 1.0, labels.clone());
 
     labels.insert("gen_ai.operation.name".into(), "chat".into());
     state.otel_publisher.emit_histogram(
@@ -1118,12 +1138,9 @@ fn emit_project_request_otel(
             };
             let mut err_labels = labels.clone();
             err_labels.insert("error.type".into(), error_type.into());
-            state.otel_publisher.emit_counter(
-                project_id,
-                "gen_ai.client.error",
-                1.0,
-                err_labels,
-            );
+            state
+                .otel_publisher
+                .emit_counter(project_id, "gen_ai.client.error", 1.0, err_labels);
 
             span_attrs.insert("error.type".into(), error_type.into());
             span_attrs.insert("error.message".into(), e.to_string());
@@ -1329,8 +1346,12 @@ mod tests {
 
     #[test]
     fn test_fallback_result_success() {
-        let fallback_result =
-            FallbackResult::primary("response".to_string(), "gpt-4o".to_string(), Provider::OpenAi, 0);
+        let fallback_result = FallbackResult::primary(
+            "response".to_string(),
+            "gpt-4o".to_string(),
+            Provider::OpenAi,
+            0,
+        );
 
         assert!(!fallback_result.fallback_used);
         assert_eq!(fallback_result.retry_count, 0);
