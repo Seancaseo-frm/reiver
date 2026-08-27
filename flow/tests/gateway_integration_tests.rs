@@ -1079,8 +1079,8 @@ async fn test_empty_model_uses_first_from_models_array() {
 // Prompt Config resolution through InMemoryPromptStore
 // ──────────────────────────────────────────────────────────────────────────────
 
-use reiver_flow::gateway::prompt_store::{InMemoryPromptStore, PromptConfigRow};
 use reiver_flow::gateway::prompt_resolver::PromptVersionConfig;
+use reiver_flow::gateway::prompt_store::{InMemoryPromptStore, PromptConfigRow};
 use rust_decimal::Decimal;
 use std::sync::Arc;
 
@@ -1195,11 +1195,7 @@ async fn test_primary_failure_falls_back_to_project_defaults() {
     let app = TestApp::new().await;
 
     // Project has fallback enabled with Anthropic as the fallback model.
-    app.set_routing(
-        true,
-        vec!["claude-3-5-sonnet-20241022".to_string()],
-        None,
-    );
+    app.set_routing(true, vec!["claude-3-5-sonnet-20241022".to_string()], None);
 
     // Trip the OpenAI circuit breaker (may or may not prevent the primary
     // call depending on test timing — the 500 mock covers both paths).
@@ -1399,7 +1395,11 @@ async fn test_platform_key_flag_preserved_through_fallback() {
         }))
         .await;
 
-    assert_eq!(resp.status(), 200, "fallback with platform key should succeed");
+    assert_eq!(
+        resp.status(),
+        200,
+        "fallback with platform key should succeed"
+    );
 
     let fallback_header = resp
         .headers()
@@ -1410,7 +1410,10 @@ async fn test_platform_key_flag_preserved_through_fallback() {
     assert_eq!(fallback_header, "true");
 
     let body: Value = resp.json().await.unwrap();
-    assert_eq!(body["choices"][0]["message"]["content"], "Platform key works!");
+    assert_eq!(
+        body["choices"][0]["message"]["content"],
+        "Platform key works!"
+    );
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1436,8 +1439,7 @@ async fn test_duplicate_fallback_models_deduplicated() {
     Mock::given(method("POST"))
         .and(path("/messages"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(anthropic_chat_response("Dedup fallback!")),
+            ResponseTemplate::new(200).set_body_json(anthropic_chat_response("Dedup fallback!")),
         )
         .expect(1)
         .mount(&app.anthropic_mock)
