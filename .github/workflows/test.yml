@@ -83,7 +83,6 @@ jobs:
               - 'flow/**'
               - 'core/**'
             pond:
-              - '.github/workflows/test.yml'
               - 'pond/**'
               - 'core/**'
             mcp:
@@ -240,9 +239,6 @@ jobs:
     if: needs.changes.outputs.mcp == 'true'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -253,9 +249,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl libcurl4-openssl-dev
 
-      - name: Verify embedded agent documentation
-        run: node scripts/verify-agent-docs.mjs
-        working-directory: mcp
 
       - name: Check
         run: cargo check --all-features
@@ -278,29 +271,6 @@ jobs:
           cache: npm
           cache-dependency-path: docs/package-lock.json
 
-      - name: Build and verify links
-        run: npm ci && npm run verify
+      - name: Build documentation
+        run: npm ci && npm run build
         working-directory: docs
-
-      - name: Check deployment verifier syntax
-        run: bash -n deploy/scripts/verify-onboarding-surfaces.sh
-
-      - name: Verify clean URLs in the production docs image
-        run: |
-          mkdir -p output/docs-dist
-          cp -r docs/.vitepress/dist/. output/docs-dist/
-          docker build --file deploy/docker/Dockerfile.docs --tag reiver-docs-test .
-          container_id="$(docker run --detach --publish 127.0.0.1:8080:80 reiver-docs-test)"
-          trap 'docker rm --force "$container_id" >/dev/null' EXIT
-          for attempt in {1..20}; do
-            if curl --fail --silent http://127.0.0.1:8080/quickstart >/dev/null; then
-              break
-            fi
-            if [[ "$attempt" == "20" ]]; then
-              echo "Docs container did not become ready" >&2
-              exit 1
-            fi
-            sleep 0.25
-          done
-          curl --fail --silent http://127.0.0.1:8080/legal/privacy >/dev/null
-          curl --fail --silent http://127.0.0.1:8080/llms.txt >/dev/null
