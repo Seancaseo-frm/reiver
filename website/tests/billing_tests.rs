@@ -54,7 +54,7 @@ mod mock_provider_tests {
 
         // Create setup intent
         let intent = provider.create_setup_intent(org_id).await.unwrap();
-        assert!(intent.setup_intent_id.starts_with("seti_mock_"));
+        assert!(intent.setup_intent_id.starts_with("seti_testmock"));
         assert!(intent.client_secret.contains("_secret_mock"));
 
         // Confirm payment method
@@ -131,7 +131,7 @@ mod mock_provider_tests {
 
         // Create subscription
         let sub = provider
-            .create_subscription(org_id, "price_test123456", None)
+            .create_subscription(org_id, "price_test1234567890ab", None)
             .await
             .unwrap();
         assert_eq!(sub.status, "active");
@@ -156,7 +156,7 @@ mod mock_provider_tests {
 
         // Create subscription
         provider
-            .create_subscription(org_id, "price_test123456", None)
+            .create_subscription(org_id, "price_test1234567890ab", None)
             .await
             .unwrap();
 
@@ -322,8 +322,8 @@ mod validation_tests {
 
     #[test]
     fn test_validate_price_id_valid() {
-        assert!(validate_price_id("price_test123456").is_ok());
-        assert!(validate_price_id("price_live_abcdefghij").is_ok());
+        assert!(validate_price_id("price_test1234567890ab").is_ok());
+        assert!(validate_price_id("price_live1234567890ab").is_ok());
     }
 
     #[test]
@@ -351,7 +351,7 @@ mod validation_tests {
 
     #[test]
     fn test_validate_setup_intent_id_valid() {
-        assert!(validate_setup_intent_id("seti_test123456").is_ok());
+        assert!(validate_setup_intent_id("seti_test1234567890abc").is_ok());
         assert!(validate_setup_intent_id("seti_1234567890abcdef").is_ok());
     }
 
@@ -968,7 +968,7 @@ mod subscription_edge_cases {
         let org_id = Uuid::new_v4();
 
         let sub = provider
-            .create_subscription(org_id, "price_test123456", None)
+            .create_subscription(org_id, "price_test1234567890ab", None)
             .await
             .unwrap();
 
