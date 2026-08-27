@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 // Import from the main crate (requires test-utils feature)
 #[cfg(feature = "test-utils")]
-use reiver::billing::{
+use reiver_website::billing::{
     validate_price_id, validate_setup_intent_id, MockPaymentProvider, PaymentError,
     PaymentProvider, PaymentProviderType, RetryConfig,
 };
@@ -530,7 +530,7 @@ mod retry_tests {
 
 #[cfg(feature = "test-utils")]
 mod subscription_status_tests {
-    use reiver::billing::subscription_status;
+    use reiver_website::billing::subscription_status;
 
     #[test]
     fn test_active_states_include_pending_cancellation() {
@@ -768,7 +768,7 @@ mod invoice_tests {
 
     #[tokio::test]
     async fn test_list_invoices_with_data() {
-        use reiver::billing::InvoiceInfo;
+        use reiver_website::billing::InvoiceInfo;
 
         let provider = MockPaymentProvider::new();
         let org_id = Uuid::new_v4();
@@ -813,7 +813,7 @@ mod invoice_tests {
 
     #[tokio::test]
     async fn test_list_invoices_pagination() {
-        use reiver::billing::InvoiceInfo;
+        use reiver_website::billing::InvoiceInfo;
 
         let provider = MockPaymentProvider::new();
         let org_id = Uuid::new_v4();
@@ -853,7 +853,7 @@ mod invoice_tests {
 
     #[tokio::test]
     async fn test_list_invoices_different_orgs() {
-        use reiver::billing::InvoiceInfo;
+        use reiver_website::billing::InvoiceInfo;
 
         let provider = MockPaymentProvider::new();
         let org1 = Uuid::new_v4();
@@ -1413,7 +1413,7 @@ mod webhook_mock_integration_tests {
         assert_eq!(ev.event_id, "evt_invoice_paid_1");
         assert!(matches!(
             ev.event_type,
-            reiver::billing::WebhookEventType::InvoicePaid
+            reiver_website::billing::WebhookEventType::InvoicePaid
         ));
 
         provider
@@ -1489,7 +1489,7 @@ mod webhook_event_type_tests {
 
         // The mock provider should recognize customer.deleted
         match event.event_type {
-            reiver::billing::WebhookEventType::CustomerDeleted => (),
+            reiver_website::billing::WebhookEventType::CustomerDeleted => (),
             other => panic!("Expected CustomerDeleted, got {:?}", other),
         }
     }
@@ -1507,7 +1507,7 @@ mod webhook_event_type_tests {
             .unwrap();
         assert!(matches!(
             event.event_type,
-            reiver::billing::WebhookEventType::SubscriptionCreated
+            reiver_website::billing::WebhookEventType::SubscriptionCreated
         ));
 
         // Test subscription.updated (different event ID)
@@ -1519,7 +1519,7 @@ mod webhook_event_type_tests {
             .unwrap();
         assert!(matches!(
             event.event_type,
-            reiver::billing::WebhookEventType::SubscriptionUpdated
+            reiver_website::billing::WebhookEventType::SubscriptionUpdated
         ));
 
         // Test subscription.deleted (different event ID)
@@ -1531,7 +1531,7 @@ mod webhook_event_type_tests {
             .unwrap();
         assert!(matches!(
             event.event_type,
-            reiver::billing::WebhookEventType::SubscriptionDeleted
+            reiver_website::billing::WebhookEventType::SubscriptionDeleted
         ));
     }
 
@@ -1548,7 +1548,7 @@ mod webhook_event_type_tests {
             .unwrap();
         assert!(matches!(
             event.event_type,
-            reiver::billing::WebhookEventType::InvoicePaid
+            reiver_website::billing::WebhookEventType::InvoicePaid
         ));
 
         // Test invoice.payment_failed
@@ -1560,7 +1560,7 @@ mod webhook_event_type_tests {
             .unwrap();
         assert!(matches!(
             event.event_type,
-            reiver::billing::WebhookEventType::InvoicePaymentFailed
+            reiver_website::billing::WebhookEventType::InvoicePaymentFailed
         ));
     }
 
@@ -1576,7 +1576,7 @@ mod webhook_event_type_tests {
             .unwrap();
 
         match event.event_type {
-            reiver::billing::WebhookEventType::Unknown(s) => {
+            reiver_website::billing::WebhookEventType::Unknown(s) => {
                 assert_eq!(s, "some.unknown.event");
             }
             other => panic!("Expected Unknown, got {:?}", other),
