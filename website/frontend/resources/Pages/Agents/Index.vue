@@ -652,6 +652,7 @@ const moodengSettings = ref({
   auto_investigate: false,
   agent_soul: emptySoul(),
 });
+const moodengSettingsLoaded = ref(false);
 
 function emptySoul() {
   return {
@@ -703,6 +704,7 @@ function openSoulOverlay() {
 }
 
 async function saveSoul() {
+  if (!moodengSettingsLoaded.value) return;
   soulSaving.value = true;
   try {
     const cleaned = { ...soulDraft.value };
@@ -715,7 +717,7 @@ async function saveSoul() {
 
     moodengSettings.value.agent_soul = cleaned;
 
-    const payload = { ...fullMoodengSettings, ...moodengSettings.value };
+    const payload = { agent_soul: cleaned };
     await axios.put(`/api/projects/${projectId.value}/llm/settings`, payload);
     fullMoodengSettings = payload;
     moodengSnapshot = JSON.stringify(moodengSettings.value);
@@ -732,6 +734,7 @@ let fullMoodengSettings = null;
 
 async function fetchMoodengSettings() {
   moodengLoading.value = true;
+  moodengSettingsLoaded.value = false;
   try {
     const { data } = await axios.get(`/api/projects/${projectId.value}/llm/settings`);
     fullMoodengSettings = data;
@@ -739,6 +742,7 @@ async function fetchMoodengSettings() {
     moodengSettings.value.agent_scopes = Array.isArray(data.agent_scopes) ? data.agent_scopes : [...DEFAULT_AGENT_SCOPES];
     moodengSettings.value.auto_investigate = data.auto_investigate ?? false;
     moodengSettings.value.agent_soul = data.agent_soul && typeof data.agent_soul === 'object' ? data.agent_soul : emptySoul();
+    moodengSettingsLoaded.value = true;
   } catch {
     fullMoodengSettings = {};
   } finally {
@@ -757,10 +761,15 @@ async function fetchIntegrations() {
 }
 
 async function saveMoodeng() {
+  if (!moodengSettingsLoaded.value) return;
   clearTimeout(moodengSaveTimer);
   moodengSaveStatus.value = 'saving';
   try {
-    const payload = { ...fullMoodengSettings, ...moodengSettings.value };
+    const payload = {
+      agent_enabled: moodengSettings.value.agent_enabled,
+      agent_scopes: moodengSettings.value.agent_scopes,
+      auto_investigate: moodengSettings.value.auto_investigate,
+    };
     await axios.put(`/api/projects/${projectId.value}/llm/settings`, payload);
     fullMoodengSettings = payload;
     moodengSaveStatus.value = 'saved';
@@ -773,7 +782,7 @@ async function saveMoodeng() {
 
 let moodengDebounce = null;
 watch(moodengSettings, () => {
-  if (!moodengSnapshot) return;
+  if (!moodengSnapshot || !moodengSettingsLoaded.value) return;
   const current = JSON.stringify(moodengSettings.value);
   if (current === moodengSnapshot) return;
   moodengSnapshot = current;

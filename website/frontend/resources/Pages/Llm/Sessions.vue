@@ -294,7 +294,7 @@
           <button
             type="button"
             class="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="profileSaveStatus === 'saving'"
+            :disabled="profileSaveStatus === 'saving' || !settingsLoaded"
             @click="saveProfiles"
           >Save Profiles</button>
           <span v-if="profileSaveStatus === 'saved'" class="text-xs text-green-600 dark:text-green-400">Saved</span>
@@ -360,7 +360,7 @@
           <button
             type="button"
             class="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="labelSaveStatus === 'saving'"
+            :disabled="labelSaveStatus === 'saving' || !settingsLoaded"
             @click="saveLabels"
           >Save Labels</button>
           <span v-if="labelSaveStatus === 'saved'" class="text-xs text-green-600 dark:text-green-400">Saved</span>
@@ -477,6 +477,7 @@ const fetchSessions = async () => {
 };
 
 const fetchProfiles = async () => {
+  settingsLoaded.value = false;
   try {
     const response = await axios.get(`/api/projects/${projectId.value}/llm/settings`);
     const data = response.data || {};
@@ -484,6 +485,7 @@ const fetchProfiles = async () => {
     fullSettings = data;
     sessionProfiles.value = Array.isArray(data.session_profiles) ? JSON.parse(JSON.stringify(data.session_profiles)) : [];
     sessionLabels.value = Array.isArray(data.session_labels) ? JSON.parse(JSON.stringify(data.session_labels)) : [];
+    settingsLoaded.value = true;
   } catch {
     availableProfiles.value = [];
     fullSettings = {};
@@ -494,6 +496,7 @@ const fetchProfiles = async () => {
 
 // ─── Session Profiles ───
 const sessionProfiles = ref([]);
+const settingsLoaded = ref(false);
 const profileSaveStatus = ref('idle');
 let fullSettings = {};
 let profileSaveTimer = null;
@@ -572,9 +575,10 @@ function addFilterToProfile(profileIdx) {
 }
 
 async function saveProfiles() {
+  if (!settingsLoaded.value) return;
   profileSaveStatus.value = 'saving';
   try {
-    const payload = { ...fullSettings, session_profiles: sessionProfiles.value };
+    const payload = { session_profiles: sessionProfiles.value };
     await axios.put(`/api/projects/${projectId.value}/llm/settings`, payload);
     fullSettings = payload;
     availableProfiles.value = JSON.parse(JSON.stringify(sessionProfiles.value));
@@ -602,9 +606,10 @@ function removeSessionLabel(index) {
 }
 
 async function saveLabels() {
+  if (!settingsLoaded.value) return;
   labelSaveStatus.value = 'saving';
   try {
-    const payload = { ...fullSettings, session_labels: sessionLabels.value };
+    const payload = { session_labels: sessionLabels.value };
     await axios.put(`/api/projects/${projectId.value}/llm/settings`, payload);
     fullSettings = payload;
     labelSaveStatus.value = 'saved';

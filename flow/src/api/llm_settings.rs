@@ -10,7 +10,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::api::{extract_organization_id, extract_project_id, extract_user_id};
@@ -384,106 +384,74 @@ fn apply_setting_row(settings: &mut LlmSettings, row: &SettingRow) {
     }
 }
 
-/// Update LLM Gateway settings for a project
-async fn update_settings(
-    State(state): State<Arc<FlowState>>,
-    headers: HeaderMap,
-    Json(settings): Json<LlmSettings>,
-) -> Result<Json<LlmSettings>> {
-    let project_id = extract_project_id(&headers)?;
-    let user_id = extract_user_id(&headers).ok();
-    let audit_origin = AuditOrigin::from_headers(&headers);
-    let audit_caller = AuditCaller::from_headers(&headers);
+/// Parse a field-selective update. Missing fields are deliberately retained as
+/// absence metadata instead of being allowed to persist serde defaults.
+fn parse_settings_update(body: serde_json::Value) -> Result<(LlmSettings, HashSet<String>)> {
+    let object = body.as_object().ok_or_else(|| {
+        crate::error::AppError::Validation("settings body must be a JSON object".into())
+    })?;
+    // These Option fields already use null as their documented clear/disable value.
+    let nullable = [
+        "fallback_order",
+        "monthly_budget_usd",
+        "per_request_limit_usd",
+        "session_budget_usd",
+        "judge_sample_rate",
+        "provider_preferences",
+    ];
+    let mut supplied_fields = HashSet::new();
+    for (key, value) in object {
+        let storage_key = format!("gateway_{key}");
+        let Some(field) = setting_field_for_key(&storage_key) else {
+            continue;
+        };
+        if value.is_null() && !nullable.contains(&field) {
+            return Err(crate::error::AppError::Validation(format!(
+                "{key} cannot be null; omit it to preserve the current value"
+            )));
+        }
+        supplied_fields.insert(field.to_string());
+    }
+    let settings = serde_json::from_value(body).map_err(|error| {
+        crate::error::AppError::Validation(format!("invalid settings payload: {error}"))
+    })?;
+    Ok((settings, supplied_fields))
+}
 
-    let before = internal_get_settings(state.db.as_ref(), project_id).await?;
+fn setting_field_for_key(key: &str) -> Option<&'static str> {
+    key.strip_prefix("gateway_").and_then(|field| match field {
+        "introspection_enabled" => Some("introspection_enabled"),
+        "thinking_budget_tokens" => Some("thinking_budget_tokens"),
+        "fallback_enabled" => Some("fallback_enabled"),
+        "fallback_order" => Some("fallback_order"),
+        "retry_enabled" => Some("retry_enabled"),
+        "retry_max_attempts" => Some("retry_max_attempts"),
+        "monthly_budget_usd" => Some("monthly_budget_usd"),
+        "budget_alert_enabled" => Some("budget_alert_enabled"),
+        "budget_hard_stop" => Some("budget_hard_stop"),
+        "per_request_limit_usd" => Some("per_request_limit_usd"),
+        "rate_limit_enabled" => Some("rate_limit_enabled"),
+        "rate_limit_rpm" => Some("rate_limit_rpm"),
+        "session_budget_usd" => Some("session_budget_usd"),
+        "guardrails" => Some("guardrails"),
+        "agent_enabled" => Some("agent_enabled"),
+        "agent_scopes" => Some("agent_scopes"),
+        "auto_investigate" => Some("auto_investigate"),
+        "judge_sample_rate" => Some("judge_sample_rate"),
+        "default_fallback_models" => Some("default_fallback_models"),
+        "provider_preferences" => Some("provider_preferences"),
+        "session_profiles" => Some("session_profiles"),
+        "session_labels" => Some("session_labels"),
+        "agent_soul" => Some("agent_soul"),
+        _ => None,
+    })
+}
 
-    // Validate settings
-    let mut errors: Vec<String> = Vec::new();
-    if settings.retry_max_attempts < 1 || settings.retry_max_attempts > 10 {
-        errors.push("retry_max_attempts must be between 1 and 10".into());
-    }
-    if settings.thinking_budget_tokens < 0 || settings.thinking_budget_tokens > 200_000 {
-        errors.push("thinking_budget_tokens must be between 0 and 200000".into());
-    }
-    if settings.rate_limit_rpm < 1 {
-        errors.push("rate_limit_rpm must be at least 1".into());
-    }
-    if let Some(budget) = settings.monthly_budget_usd {
-        if budget < 0.0 {
-            errors.push("monthly_budget_usd cannot be negative".into());
-        }
-    }
-    if let Some(limit) = settings.per_request_limit_usd {
-        if limit < 0.0 {
-            errors.push("per_request_limit_usd cannot be negative".into());
-        }
-    }
-    if let Some(rate) = settings.judge_sample_rate {
-        if !(0.0..=1.0).contains(&rate) {
-            errors.push("judge_sample_rate must be between 0.0 and 1.0".into());
-        }
-    }
-    if let Err(e) = reiver_mcp::scope::validate_scope_names(&settings.agent_scopes) {
-        errors.push(format!("agent_scopes: {e}"));
-    }
-    for (i, profile) in settings.session_profiles.iter().enumerate() {
-        if profile.name.trim().is_empty() {
-            errors.push(format!("session_profiles[{}]: name cannot be empty", i));
-        }
-        if profile.filters.is_empty() {
-            errors.push(format!(
-                "session_profiles[{}]: must have at least one filter",
-                i
-            ));
-        }
-        for (j, filter) in profile.filters.iter().enumerate() {
-            if !crate::api::session_profiles::is_valid_field(&filter.field) {
-                errors.push(format!(
-                    "session_profiles[{}].filters[{}]: unknown field '{}'",
-                    i, j, filter.field
-                ));
-            }
-        }
-    }
-    if settings.session_labels.len() > 50 {
-        errors.push("session_labels cannot have more than 50 labels".into());
-    }
-
-    // Enforce tier-based max label types limit
-    if let Ok(Some(org_id)) = state.get_organization_id(project_id).await {
-        if let Ok(tier) = state.entitlements.get_config(org_id).await {
-            let max = tier.config.prompt_hub.max_labels;
-            if max >= 0 && (settings.session_labels.len() as i64) > max {
-                errors.push(format!(
-                    "Your plan allows at most {} label types (current: {}). Upgrade for more.",
-                    max,
-                    settings.session_labels.len()
-                ));
-            }
-        }
-    }
-    for (i, label) in settings.session_labels.iter().enumerate() {
-        if label.name.trim().is_empty() {
-            errors.push(format!("session_labels[{}]: name cannot be empty", i));
-        }
-    }
-    {
-        let mut seen = std::collections::HashSet::new();
-        for label in &settings.session_labels {
-            if !seen.insert(label.name.as_str()) {
-                errors.push(format!(
-                    "session_labels: duplicate label name '{}'",
-                    label.name
-                ));
-            }
-        }
-    }
-    if !errors.is_empty() {
-        return Err(crate::error::AppError::Validation(errors.join("; ")));
-    }
-
-    // Build settings map
-    let settings_map: Vec<(&str, String)> = vec![
+fn build_settings_updates(
+    settings: &LlmSettings,
+    supplied_fields: &HashSet<String>,
+) -> Vec<(&'static str, String)> {
+    let candidates = vec![
         (
             "gateway_introspection_enabled",
             settings.introspection_enabled.to_string(),
@@ -584,6 +552,114 @@ async fn update_settings(
             serde_json::to_string(&settings.agent_soul).unwrap_or_else(|_| "{}".to_string()),
         ),
     ];
+    candidates
+        .into_iter()
+        .filter(|(key, _)| {
+            setting_field_for_key(key).is_some_and(|field| supplied_fields.contains(field))
+        })
+        .collect()
+}
+
+/// Update LLM Gateway settings for a project
+async fn update_settings(
+    State(state): State<Arc<FlowState>>,
+    headers: HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<LlmSettings>> {
+    let project_id = extract_project_id(&headers)?;
+    let user_id = extract_user_id(&headers).ok();
+    let audit_origin = AuditOrigin::from_headers(&headers);
+    let audit_caller = AuditCaller::from_headers(&headers);
+
+    let before = internal_get_settings(state.db.as_ref(), project_id).await?;
+    let (settings, supplied_fields) = parse_settings_update(body)?;
+
+    // Validate settings
+    let mut errors: Vec<String> = Vec::new();
+    if settings.retry_max_attempts < 1 || settings.retry_max_attempts > 10 {
+        errors.push("retry_max_attempts must be between 1 and 10".into());
+    }
+    if settings.thinking_budget_tokens < 0 || settings.thinking_budget_tokens > 200_000 {
+        errors.push("thinking_budget_tokens must be between 0 and 200000".into());
+    }
+    if settings.rate_limit_rpm < 1 {
+        errors.push("rate_limit_rpm must be at least 1".into());
+    }
+    if let Some(budget) = settings.monthly_budget_usd {
+        if budget < 0.0 {
+            errors.push("monthly_budget_usd cannot be negative".into());
+        }
+    }
+    if let Some(limit) = settings.per_request_limit_usd {
+        if limit < 0.0 {
+            errors.push("per_request_limit_usd cannot be negative".into());
+        }
+    }
+    if let Some(rate) = settings.judge_sample_rate {
+        if !(0.0..=1.0).contains(&rate) {
+            errors.push("judge_sample_rate must be between 0.0 and 1.0".into());
+        }
+    }
+    if let Err(e) = reiver_mcp::scope::validate_scope_names(&settings.agent_scopes) {
+        errors.push(format!("agent_scopes: {e}"));
+    }
+    for (i, profile) in settings.session_profiles.iter().enumerate() {
+        if profile.name.trim().is_empty() {
+            errors.push(format!("session_profiles[{}]: name cannot be empty", i));
+        }
+        if profile.filters.is_empty() {
+            errors.push(format!(
+                "session_profiles[{}]: must have at least one filter",
+                i
+            ));
+        }
+        for (j, filter) in profile.filters.iter().enumerate() {
+            if !crate::api::session_profiles::is_valid_field(&filter.field) {
+                errors.push(format!(
+                    "session_profiles[{}].filters[{}]: unknown field '{}'",
+                    i, j, filter.field
+                ));
+            }
+        }
+    }
+    if settings.session_labels.len() > 50 {
+        errors.push("session_labels cannot have more than 50 labels".into());
+    }
+
+    // Enforce tier-based max label types limit
+    if let Ok(Some(org_id)) = state.get_organization_id(project_id).await {
+        if let Ok(tier) = state.entitlements.get_config(org_id).await {
+            let max = tier.config.prompt_hub.max_labels;
+            if max >= 0 && (settings.session_labels.len() as i64) > max {
+                errors.push(format!(
+                    "Your plan allows at most {} label types (current: {}). Upgrade for more.",
+                    max,
+                    settings.session_labels.len()
+                ));
+            }
+        }
+    }
+    for (i, label) in settings.session_labels.iter().enumerate() {
+        if label.name.trim().is_empty() {
+            errors.push(format!("session_labels[{}]: name cannot be empty", i));
+        }
+    }
+    {
+        let mut seen = std::collections::HashSet::new();
+        for label in &settings.session_labels {
+            if !seen.insert(label.name.as_str()) {
+                errors.push(format!(
+                    "session_labels: duplicate label name '{}'",
+                    label.name
+                ));
+            }
+        }
+    }
+    if !errors.is_empty() {
+        return Err(crate::error::AppError::Validation(errors.join("; ")));
+    }
+
+    let settings_map = build_settings_updates(&settings, &supplied_fields);
 
     // Use transaction to ensure atomicity of all settings updates
     let mut tx = state.db.begin().await?;
@@ -610,13 +686,15 @@ async fn update_settings(
     // Invalidate settings cache so the gateway picks up changes immediately
     state.introspection_settings_cache.remove(&project_id);
 
-    // Invalidate Redis-cached session labels so the consumer picks up changes immediately
-    if let Ok(mut conn) = state.redis.get().await {
-        let cache_key = format!("session_labels:{}", project_id);
-        let _ = redis::cmd("DEL")
-            .arg(&cache_key)
-            .query_async::<i64>(&mut *conn)
-            .await;
+    // Invalidate Redis-cached session labels only when labels changed.
+    if supplied_fields.contains("session_labels") {
+        if let Ok(mut conn) = state.redis.get().await {
+            let cache_key = format!("session_labels:{}", project_id);
+            let _ = redis::cmd("DEL")
+                .arg(&cache_key)
+                .query_async::<i64>(&mut *conn)
+                .await;
+        }
     }
 
     // Re-read persisted values to return the canonical state
@@ -626,6 +704,7 @@ async fn update_settings(
     let mut audit = AuditEventBuilder::new(AuditEventType::LlmSettingsUpdated)
         .project(&project_id.to_string())
         .details(serde_json::json!({
+            "updated_fields": supplied_fields,
             "before": {
                 "introspection_enabled": before.introspection_enabled,
                 "thinking_budget_tokens": before.thinking_budget_tokens,
@@ -1048,6 +1127,46 @@ async fn internal_get_settings(
 mod tests {
     use super::*;
 
+    const ALL_GATEWAY_KEYS: [&str; 23] = [
+        "gateway_introspection_enabled",
+        "gateway_thinking_budget_tokens",
+        "gateway_fallback_enabled",
+        "gateway_fallback_order",
+        "gateway_retry_enabled",
+        "gateway_retry_max_attempts",
+        "gateway_monthly_budget_usd",
+        "gateway_budget_alert_enabled",
+        "gateway_budget_hard_stop",
+        "gateway_per_request_limit_usd",
+        "gateway_rate_limit_enabled",
+        "gateway_rate_limit_rpm",
+        "gateway_session_budget_usd",
+        "gateway_guardrails",
+        "gateway_agent_enabled",
+        "gateway_agent_scopes",
+        "gateway_auto_investigate",
+        "gateway_judge_sample_rate",
+        "gateway_default_fallback_models",
+        "gateway_provider_preferences",
+        "gateway_session_profiles",
+        "gateway_session_labels",
+        "gateway_agent_soul",
+    ];
+
+    fn recognizable_store() -> HashMap<String, String> {
+        ALL_GATEWAY_KEYS
+            .iter()
+            .map(|key| (key.to_string(), format!("recognizable-before:{key}")))
+            .collect()
+    }
+
+    fn apply_selected_updates(store: &mut HashMap<String, String>, body: serde_json::Value) {
+        let (settings, fields) = parse_settings_update(body).unwrap();
+        for (key, value) in build_settings_updates(&settings, &fields) {
+            store.insert(key.to_string(), value);
+        }
+    }
+
     fn row(key: &str, value: &str) -> SettingRow {
         SettingRow {
             key: key.to_string(),
@@ -1224,5 +1343,160 @@ mod tests {
         assert!(s.default_fallback_models.is_empty());
         assert!(s.provider_preferences.is_none());
         assert!(s.fallback_enabled);
+    }
+
+    #[test]
+    fn guardrails_only_update_selects_no_unrelated_storage_keys() {
+        let (_, fields) = parse_settings_update(serde_json::json!({
+            "guardrails": { "prompt_injection_detection": false },
+            "judge_sample_rate": 0.25
+        }))
+        .unwrap();
+        assert_eq!(fields.len(), 2);
+        assert!(fields.contains(setting_field_for_key("gateway_guardrails").unwrap()));
+        assert!(fields.contains(setting_field_for_key("gateway_judge_sample_rate").unwrap()));
+
+        for protected in [
+            "gateway_session_labels",
+            "gateway_session_profiles",
+            "gateway_agent_soul",
+            "gateway_default_fallback_models",
+            "gateway_fallback_order",
+            "gateway_provider_preferences",
+            "gateway_monthly_budget_usd",
+            "gateway_per_request_limit_usd",
+            "gateway_session_budget_usd",
+            "gateway_rate_limit_enabled",
+            "gateway_rate_limit_rpm",
+            "gateway_retry_enabled",
+            "gateway_retry_max_attempts",
+            "gateway_agent_enabled",
+            "gateway_agent_scopes",
+            "gateway_auto_investigate",
+            "gateway_introspection_enabled",
+        ] {
+            assert!(!fields.contains(setting_field_for_key(protected).unwrap()));
+        }
+    }
+
+    #[test]
+    fn explicit_empty_taxonomies_are_selected_for_intentional_clear() {
+        let (labels, label_fields) =
+            parse_settings_update(serde_json::json!({ "session_labels": [] })).unwrap();
+        assert!(labels.session_labels.is_empty());
+        assert_eq!(label_fields, HashSet::from(["session_labels".to_string()]));
+
+        let (profiles, profile_fields) =
+            parse_settings_update(serde_json::json!({ "session_profiles": [] })).unwrap();
+        assert!(profiles.session_profiles.is_empty());
+        assert_eq!(
+            profile_fields,
+            HashSet::from(["session_profiles".to_string()])
+        );
+    }
+
+    #[test]
+    fn ambiguous_null_is_rejected_but_documented_nullable_clear_is_allowed() {
+        let error =
+            parse_settings_update(serde_json::json!({ "session_labels": null })).unwrap_err();
+        assert!(
+            matches!(error, crate::error::AppError::Validation(message) if message.contains("cannot be null"))
+        );
+
+        let (settings, fields) =
+            parse_settings_update(serde_json::json!({ "monthly_budget_usd": null })).unwrap();
+        assert!(settings.monthly_budget_usd.is_none());
+        assert!(fields.contains("monthly_budget_usd"));
+    }
+
+    #[test]
+    fn complete_settings_request_selects_every_gateway_setting() {
+        let complete = serde_json::to_value(LlmSettings::default()).unwrap();
+        let (_, fields) = parse_settings_update(complete).unwrap();
+        assert_eq!(fields.len(), 23);
+        for key in [
+            "gateway_introspection_enabled",
+            "gateway_thinking_budget_tokens",
+            "gateway_fallback_enabled",
+            "gateway_fallback_order",
+            "gateway_retry_enabled",
+            "gateway_retry_max_attempts",
+            "gateway_monthly_budget_usd",
+            "gateway_budget_alert_enabled",
+            "gateway_budget_hard_stop",
+            "gateway_per_request_limit_usd",
+            "gateway_rate_limit_enabled",
+            "gateway_rate_limit_rpm",
+            "gateway_session_budget_usd",
+            "gateway_guardrails",
+            "gateway_agent_enabled",
+            "gateway_agent_scopes",
+            "gateway_auto_investigate",
+            "gateway_judge_sample_rate",
+            "gateway_default_fallback_models",
+            "gateway_provider_preferences",
+            "gateway_session_profiles",
+            "gateway_session_labels",
+            "gateway_agent_soul",
+        ] {
+            assert!(fields.contains(setting_field_for_key(key).unwrap()));
+        }
+    }
+
+    #[test]
+    fn final_storage_selection_preserves_all_unsupplied_settings() {
+        let mut store = recognizable_store();
+        let before = store.clone();
+        apply_selected_updates(
+            &mut store,
+            serde_json::json!({
+                "guardrails": { "prompt_injection_detection": true },
+                "judge_sample_rate": 0.75
+            }),
+        );
+
+        assert_ne!(store["gateway_guardrails"], before["gateway_guardrails"]);
+        assert_eq!(store["gateway_judge_sample_rate"], "0.75");
+        for key in ALL_GATEWAY_KEYS {
+            if !matches!(key, "gateway_guardrails" | "gateway_judge_sample_rate") {
+                assert_eq!(store[key], before[key], "{key} must be preserved");
+            }
+        }
+    }
+
+    #[test]
+    fn final_storage_selection_clears_labels_only() {
+        let mut store = recognizable_store();
+        let before = store.clone();
+        apply_selected_updates(&mut store, serde_json::json!({ "session_labels": [] }));
+        assert_eq!(store["gateway_session_labels"], "[]");
+        for key in ALL_GATEWAY_KEYS {
+            if key != "gateway_session_labels" {
+                assert_eq!(store[key], before[key], "{key} must be preserved");
+            }
+        }
+    }
+
+    #[test]
+    fn final_storage_selection_clears_profiles_only() {
+        let mut store = recognizable_store();
+        let before = store.clone();
+        apply_selected_updates(&mut store, serde_json::json!({ "session_profiles": [] }));
+        assert_eq!(store["gateway_session_profiles"], "[]");
+        for key in ALL_GATEWAY_KEYS {
+            if key != "gateway_session_profiles" {
+                assert_eq!(store[key], before[key], "{key} must be preserved");
+            }
+        }
+    }
+
+    #[test]
+    fn audit_field_selection_excludes_transport_metadata() {
+        let (_, fields) = parse_settings_update(serde_json::json!({
+            "project_id": "00000000-0000-0000-0000-000000000001",
+            "guardrails": { "prompt_injection_detection": true }
+        }))
+        .unwrap();
+        assert_eq!(fields, HashSet::from(["guardrails".to_string()]));
     }
 }
