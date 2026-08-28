@@ -23,13 +23,13 @@ images:
     newTag: latest
   - name: reiver-flow:latest
     newName: docker.io/library/reiver-flow
-    newTag: latest
+    newTag: 224e86aa5d80e60acee897cb5d18ce66fab88bd2
   - name: reiver-website:latest
     newName: docker.io/library/reiver-website
-    newTag: dada3f1931a1168bd429057f217a6f59da24598b
+    newTag: 224e86aa5d80e60acee897cb5d18ce66fab88bd2
   - name: reiver-mcp:latest
     newName: docker.io/library/reiver-mcp
-    newTag: dada3f1931a1168bd429057f217a6f59da24598b
+    newTag: 224e86aa5d80e60acee897cb5d18ce66fab88bd2
   - name: reiver-herd:latest
     newName: docker.io/library/reiver-herd
     newTag: latest
