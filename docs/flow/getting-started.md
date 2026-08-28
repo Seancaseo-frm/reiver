@@ -1,128 +1,70 @@
 # Getting Started with Flow
 
-Flow is Reiver's prompt hub and LLM gateway. It lets you version, test, and roll out prompts centrally, and exposes an **OpenAI-compatible API** so you can connect any existing application by changing a single URL — no new SDK required.
+Flow is Reiver's Prompt Hub and OpenAI-compatible LLM gateway. This is an independent onboarding track: Watch, application logs, application metrics, and MCP are not required.
 
-## Quick Start
+## Before you start
 
-Point any OpenAI-compatible client at Reiver. Here's a Python example:
+You need two different credentials:
+
+- A **provider key** is saved inside Reiver so Flow can call the provider. It never belongs in your application.
+- An **SDK key** authenticates your application to Flow. Keep it in a secret store and bind it as `REIVER_FLOW_API_KEY`.
+
+If you later add Watch, the same SDK-key value may currently be bound separately as `REIVER_WATCH_API_KEY`. A coding agent uses a different `REIVER_AGENT_TOKEN`; agent tokens are not application keys.
+
+No credential belongs in code, examples, logs, or reports.
+
+## 1. Connect a provider
+
+Add the provider credential in **Prompt Hub → Settings** and use Reiver's connection test. Choose a model available to that provider; this guide deliberately does not prescribe one.
+
+## 2. Send one real application request
+
+Store the SDK key outside the code:
+
+```bash
+export REIVER_FLOW_API_KEY="<SDK key from your secret store>"
+```
+
+Point an OpenAI-compatible client at Flow:
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="dh_your_key",
-    base_url="https://reiver.ai/api/gateway/v1"
+    api_key=os.environ["REIVER_FLOW_API_KEY"],
+    base_url="https://reiver.ai/api/gateway/v1",
 )
 
 response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Hello!"}
-    ]
+    model=os.environ["REIVER_MODEL"],
+    messages=[{"role": "user", "content": "Hello from my application"}],
 )
-
 print(response.choices[0].message.content)
 ```
 
-That's it. Your existing system prompt, messages, and parameters are forwarded to the LLM provider exactly as you send them. Flow adds observability, cost tracking, and failover on top — without modifying your request.
+Use a real application path rather than treating a Playground-only request as completion.
 
-## Using Other Providers
+## 3. Add Prompt Hub only when needed
 
-The same API works with any supported provider. Just change the model name:
+Managed prompts are optional. When you reference a prompt configuration and the request has no system message, Flow can inject the active managed prompt. If the request already contains a system message, Flow preserves it and skips managed-prompt injection.
 
-```python
-# Anthropic
-response = client.chat.completions.create(
-    model="claude-3-5-sonnet",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+See [Prompt Management](/flow/prompt-management) for versioning and rollout details.
 
-# Google Gemini
-response = client.chat.completions.create(
-    model="gemini-2.0-flash",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+## Definition of done
 
-# AWS Bedrock
-response = client.chat.completions.create(
-    model="anthropic.claude-3-sonnet-20240229-v1:0",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-```
+| Check | Required evidence |
+|---|---|
+| Provider | Reiver's provider connection test passed. |
+| Gateway | One real application request succeeded through `https://reiver.ai/api/gateway/v1`. |
+| Routing | The response identifies the provider and model Flow actually used. |
+| Prompt Hub | If selected, the intended managed prompt version was used; otherwise this row is deliberately omitted. |
+| Secrets | No provider key or SDK key appears in source, logs, screenshots, or the report. |
 
-Flow translates the OpenAI request format to each provider's native API automatically.
+Watch traces, logs, metrics, and MCP evidence are not acceptance criteria for this track.
 
-## Auto Model Selection
+## Next steps
 
-Set the model to `"auto"` and Flow will select the best model from your project's preferred models list:
-
-```python
-response = client.chat.completions.create(
-    model="auto",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-```
-
-The `x-reiver-model-used` response header tells you which model was selected.
-
-## Streaming
-
-Flow supports Server-Sent Events (SSE) streaming for all providers:
-
-```python
-stream = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "Tell me a story."}],
-    stream=True
-)
-
-for chunk in stream:
-    if chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="")
-```
-
-## Node.js / TypeScript
-
-```typescript
-import OpenAI from 'openai';
-
-const client = new OpenAI({
-  apiKey: 'dh_your_key',
-  baseURL: 'https://reiver.ai/api/gateway/v1',
-});
-
-const response = await client.chat.completions.create({
-  model: 'claude-3-5-sonnet',
-  messages: [{ role: 'user', content: 'Hello!' }],
-});
-
-console.log(response.choices[0].message.content);
-```
-
-## cURL
-
-```bash
-curl https://reiver.ai/api/gateway/v1/chat/completions \
-  -H "Authorization: Bearer dh_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
-```
-
-## What Happens to My System Prompt?
-
-Your existing system prompt and messages are **preserved exactly as sent**. Flow acts as a transparent proxy by default.
-
-If you later opt in to [Prompt Management](/flow/prompt-management), Flow can inject a managed system prompt when your request doesn't already include one. If your request already contains a system message, the managed prompt is skipped — your messages are never modified. See the [Prompt Management](/flow/prompt-management) page for the full workflow.
-
-## Next Steps
-
-- [Prompt Management](/flow/prompt-management) — Version, test, and roll out prompts
-- [Features](/flow/features) — Caching, failover, guardrails, PII masking, and more
-- [Supported Models](/flow/models) — Full list of providers and models
-- [API Reference](/flow/api-reference) — Endpoints, request/response types, and headers
+- Define the [Session and Identity Contract](/flow/session-telemetry) if business-episode analysis matters.
+- Complete [Watch](/watch/) independently if you want application traces, logs, and metrics.
+- Use the [Complete Reiver track](/quickstart) to correlate both products.

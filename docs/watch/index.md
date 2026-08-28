@@ -1,155 +1,112 @@
-# Watch — Application Performance Monitoring
+# Watch: Traces, Structured Logs, and Metrics
 
-Watch is Reiver's APM product. It provides full-stack application performance monitoring with distributed tracing, error tracking, log aggregation, real-time metrics, and continuous profiling.
+Watch accepts OpenTelemetry Protocol data over HTTP. This is an independently completable track: it does not require a provider key, Flow gateway routing, or MCP write access.
 
-## Quick Start
+## Credential and endpoint
 
-### Step 1: Get your API key
-
-Go to your project in Reiver and navigate to **Settings → Integrations**. Copy your project API key (starts with `dh_`).
-
-### Step 2: Send your first traces
-
-Configure your OpenTelemetry SDK or Collector to send data to Watch:
-
-| Setting        | Value                                  |
-|----------------|----------------------------------------|
-| **Endpoint**   | `https://reiver.ai/api/watch/ingest` |
-| **Protocol**   | `http/protobuf` or `http/json`         |
-| **Header**     | `Authorization: Bearer <your-project-api-key>` |
-
-Gzip compression is supported.
-
-#### Python
+Create an SDK key and keep it in the application's secret store:
 
 ```bash
-pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+export REIVER_WATCH_API_KEY="<SDK key from your secret store>"
 ```
 
-```python
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+| Setting | Value |
+|---|---|
+| OTLP HTTP base endpoint | `https://reiver.ai/api/watch/ingest` |
+| Signal paths | `/v1/traces`, `/v1/logs`, `/v1/metrics` |
+| Protocol | `http/protobuf` or `http/json` |
+| Authorization | `Bearer <SDK key>` |
 
-exporter = OTLPSpanExporter(
-    endpoint="https://reiver.ai/api/watch/ingest/v1/traces",
-    headers={"Authorization": "Bearer dh_..."},
-)
-provider = TracerProvider()
-provider.add_span_processor(BatchSpanProcessor(exporter))
-trace.set_tracer_provider(provider)
+The same SDK-key value may currently be bound separately as `REIVER_FLOW_API_KEY` when the application also uses Flow. `REIVER_AGENT_TOKEN` is a separate MCP credential and is not accepted for Watch ingestion.
 
-tracer = trace.get_tracer(__name__)
-with tracer.start_as_current_span("my-first-span"):
-    print("Hello, Watch!")
-```
+No credential belongs in application code, telemetry, logs, or reports.
 
-#### Node.js
+## An endpoint is not instrumentation
+
+Full Watch onboarding requires three real pipelines:
+
+| Signal | What must exist |
+|---|---|
+| Traces | Instrumentation that creates spans, a tracer provider, a processor, and an OTLP trace exporter. |
+| Structured logs | A logging source or bridge, a logger provider, a processor, and an OTLP log exporter. Stdout alone is not an OTLP log pipeline. |
+| Metrics | Runtime or application instruments, a meter provider, a periodic reader, and an OTLP metric exporter. |
+
+Setting `OTEL_EXPORTER_OTLP_ENDPOINT` only tells initialized exporters where to send data. It does not install instrumentation or automatically create all three signals.
+
+For SDKs that implement the standard environment configuration:
 
 ```bash
-npm install @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-proto
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://reiver.ai/api/watch/ingest"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer $REIVER_WATCH_API_KEY"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_SERVICE_NAME="my-application"
+export OTEL_TRACES_EXPORTER="otlp"
+export OTEL_LOGS_EXPORTER="otlp"
+export OTEL_METRICS_EXPORTER="otlp"
 ```
 
-```javascript
-const { NodeSDK } = require('@opentelemetry/sdk-node');
-const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-proto');
+Language distributions differ. Confirm that the application's SDK actually initializes every provider and exporter. If you use signal-specific endpoint variables, include the complete `/v1/traces`, `/v1/logs`, or `/v1/metrics` path.
 
-const sdk = new NodeSDK({
-  traceExporter: new OTLPTraceExporter({
-    url: 'https://reiver.ai/api/watch/ingest/v1/traces',
-    headers: { Authorization: 'Bearer dh_...' },
-  }),
-});
-sdk.start();
-```
+## Collector example
 
-#### OTel Collector
-
-If you already run an OpenTelemetry Collector, add a Reiver exporter:
+An existing OpenTelemetry Collector can provide batching and retries. Each signal still needs a receiver and an enabled pipeline:
 
 ```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  batch:
+
 exporters:
   otlphttp/reiver:
     endpoint: https://reiver.ai/api/watch/ingest
     headers:
-      Authorization: "Bearer dh_..."
-    compression: gzip
+      Authorization: "Bearer ${env:REIVER_WATCH_API_KEY}"
 
 service:
   pipelines:
     traces:
+      receivers: [otlp]
+      processors: [batch]
       exporters: [otlphttp/reiver]
     logs:
+      receivers: [otlp]
+      processors: [batch]
       exporters: [otlphttp/reiver]
     metrics:
+      receivers: [otlp]
+      processors: [batch]
       exporters: [otlphttp/reiver]
 ```
 
-::: tip What this unlocks
-Once data is flowing, you immediately get distributed tracing, error tracking, log aggregation, and real-time metrics — all visible in the Watch section of your project dashboard.
-:::
+Defining an exporter outside `service.pipelines` does not enable it.
 
-### Step 3: Explore your data
+## Definition of done
 
-Open your project in Reiver and navigate to:
+Generate evidence from a real application path, then confirm:
 
-- **Tracing** — see the full path of requests across services
-- **Errors** — view auto-grouped exceptions with stack traces
-- **Logs** — search structured logs correlated with traces
+| Check | Required evidence |
+|---|---|
+| Trace | A known application trace is queryable under the expected stable `service.name`. |
+| Structured log | A known structured log is queryable and carries the expected service identity. |
+| Metric | A known application or runtime metric has a recent data point under that service. |
+| Correlation | If required, trace and log carry the agreed session and pseudonymous user attributes. |
+| Secrets | The SDK key and sensitive customer content are absent from all evidence and reports. |
 
-### Next Steps
+Read-only MCP with `observability:read` may be used as an additional verification path, but it is optional. Do not grant MCP write access merely to complete Watch onboarding.
 
-- **Dashboards** — build custom dashboards from your metrics
-- **Alerts** — set up alert rules with Slack, PagerDuty, Discord, Teams, ServiceNow, or webhooks
-- **Health Checks** — create HTTP/TCP/SSL synthetic monitors
-- **Profiling** — enable continuous profiling for CPU and memory flamegraphs
+## Troubleshooting
 
-Watch also accepts AWS X-Ray segments at `/api/xray/segment` and `/api/xray/segments` with the same authorization header.
+| Symptom | Check |
+|---|---|
+| Traces arrive, logs do not | Confirm a logging bridge/provider/processor/exporter exists; stdout is not automatically exported. |
+| Traces arrive, metrics do not | Confirm a meter provider, periodic reader, exporter, and an instrument producing measurements exist. |
+| Nothing arrives | Check SDK diagnostics, protocol, full signal path, authorization, egress, and shutdown flushing without printing the key. |
+| Services are fragmented | Use the same stable `service.name` resource for all three signals. |
+| Logs lack trace correlation | Emit them within the active span and use a bridge that copies trace context. |
 
----
-
-## Features
-
-### Distributed Tracing
-OTLP-native distributed tracing with end-to-end request visualization. See the complete path of a request across services, databases, and external APIs.
-
-### Error Tracking
-Automatic exception capture with intelligent fingerprinting that groups similar errors together. Track regressions, assign ownership, and link errors to commits via GitHub integration.
-
-### Log Aggregation
-Structured log collection with full-text and semantic search. Logs are automatically correlated with traces and spans for root cause analysis.
-
-### Real-Time Metrics
-Custom dashboards with threshold-based and anomaly detection alerting. Build dashboards from any metric your application emits.
-
-### Continuous Profiling
-CPU and memory flamegraphs linked directly to traces. Identify hot paths and memory allocations in production without sampling bias.
-
-### Infrastructure Monitoring
-Kubernetes cluster observability with live and historical views of nodes, pods, deployments, and services. CPU, memory, and disk utilization with capacity planning.
-
-### Database Monitoring
-Query explain plans, slow query detection, and connection pool monitoring. See exactly which queries are slowing down your application.
-
-### Synthetic Monitoring
-HTTP, TCP, and SSL health checks from multiple locations. Detect outages before your users do.
-
-### Alerts & Notifications
-Configurable alert rules with notifications to:
-- Slack
-- PagerDuty
-- Discord
-- Microsoft Teams
-- ServiceNow
-- Webhooks
-
-### Cloud Integrations
-Native monitoring integrations:
-- **AWS** — CloudWatch metrics, X-Ray traces
-- **Azure** — Azure Monitor integration
-- **GCP** — Cloud Monitoring integration
-- **Oracle Cloud** — OCI monitoring
-
-### LLM Observability
-When used alongside Flow, Watch provides visibility into LLM calls: token usage, costs, latency, and prompt/response payloads — all linked to the originating application trace.
+For combined Flow and Watch correlation, agree the [Session and Identity Contract](/flow/session-telemetry), then follow [Complete Reiver](/quickstart).

@@ -3,16 +3,22 @@
 Connect AI agents to Reiver using the Model Context Protocol. Configure your MCP client to connect to the Reiver API with an agent token.
 
 ::: tip What this unlocks
-After completing setup, your agent can list projects, query traces and logs, manage prompt configurations, run playground comparisons, create dashboards and alert rules, and access all 100+ platform operations through 6 high-level tools.
+After completing setup, your agent can use Reiver's currently exposed MCP resources and tools within the scopes on its token. Read-only scopes can verify projects, Flow records, traces, logs, metrics, dashboards, and alerts without granting write access.
 :::
 
 ## Prerequisites
 
 - A Reiver project with an **agent token** (create one under **Settings → Agent Tokens** in your project)
 
+The coding agent uses `REIVER_AGENT_TOKEN`. Your application uses an SDK key, which may currently be bound separately as `REIVER_FLOW_API_KEY` and `REIVER_WATCH_API_KEY`. A provider key stays inside Reiver. These credentials are not interchangeable, and none belongs in code, documentation examples, logs, or reports.
+
 ::: warning SDK keys are not accepted
 MCP requires an agent token. Regular SDK API keys will be rejected with a 403 error. Agent tokens provide scoped access specifically designed for AI agent integrations — they can be individually revoked and are tracked separately in audit logs.
 :::
+
+Start with read-only scopes such as `project:read`, `llm:read`, and `observability:read`, adding only the scopes needed for an approved task. Flow and Watch onboarding do not require MCP write access.
+
+The current MCP server does not expose `agent://onboarding`. Use the human [Start Here](/quickstart) guide; onboarding-specific MCP guidance is deliberately deferred to a later MCP release.
 
 ## Cursor
 
