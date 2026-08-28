@@ -17,7 +17,7 @@ export REIVER_WATCH_API_KEY="<SDK key from your secret store>"
 | Protocol | `http/protobuf` or `http/json` |
 | Authorization | `Bearer <SDK key>` |
 
-The same SDK-key value may currently be bound separately as `REIVER_FLOW_API_KEY` when the application also uses Flow. `REIVER_AGENT_TOKEN` is a separate MCP credential and is not accepted for Watch ingestion.
+The same SDK-key value may currently be bound separately as `REIVER_FLOW_API_KEY` when the application also uses Flow. `REIVER_AGENT_TOKEN` is a separate MCP credential. Do not use it for Watch ingestion; applications should use the SDK key bound as `REIVER_WATCH_API_KEY`.
 
 No credential belongs in application code, telemetry, logs, or reports.
 
