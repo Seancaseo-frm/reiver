@@ -124,7 +124,10 @@ mod tests {
 
     #[test]
     fn onboarding_is_the_first_resource() {
-        assert_eq!(ALL_DOCS.first().map(|doc| doc.uri), Some("agent://onboarding"));
+        assert_eq!(
+            ALL_DOCS.first().map(|doc| doc.uri),
+            Some("agent://onboarding")
+        );
     }
 
     #[test]
@@ -141,7 +144,10 @@ mod tests {
             "session_profiles: []",
             "owner's assignment",
         ] {
-            assert!(content.contains(marker), "missing onboarding marker: {marker}");
+            assert!(
+                content.contains(marker),
+                "missing onboarding marker: {marker}"
+            );
         }
     }
 
