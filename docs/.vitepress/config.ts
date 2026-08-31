@@ -31,6 +31,7 @@ export default defineConfig({
     siteTitle: 'Reiver Docs',
 
     nav: [
+      { text: 'Start Here', link: '/quickstart' },
       { text: 'Flow', link: '/flow/getting-started' },
       { text: 'Watch', link: '/watch/' },
       // Pond disabled — re-enable when Pond launches
