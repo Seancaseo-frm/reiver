@@ -34,14 +34,7 @@ impl ServerHandler for McpServer {
             .enable_resources()
             .build();
         info.server_info = Implementation::from_build_env();
-        info.instructions = Some(
-            "Reiver platform MCP server. \
-             Platform operations (querying data, managing dashboards, alerts, prompts, billing) \
-             are performed through these tools. REST API endpoints and SDKs described in the \
-             documentation resources are for application integration and require application \
-             API keys — they do not accept agent tokens."
-                .into(),
-        );
+        info.instructions = Some(docs::SERVER_INSTRUCTIONS.into());
         info
     }
 
@@ -222,8 +215,11 @@ mod tests {
         let server = McpServer::new(registry, test_ctx());
 
         let info = server.get_info();
-        assert!(info.instructions.is_some());
-        assert!(info.instructions.unwrap().contains("Reiver"));
+        assert_eq!(
+            info.instructions.as_deref(),
+            Some(docs::SERVER_INSTRUCTIONS)
+        );
+        assert!(info.instructions.unwrap().contains("agent://onboarding"));
     }
 
     #[test]
