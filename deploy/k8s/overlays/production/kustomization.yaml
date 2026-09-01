@@ -26,16 +26,16 @@ images:
     newTag: 224e86aa5d80e60acee897cb5d18ce66fab88bd2
   - name: reiver-website:latest
     newName: docker.io/library/reiver-website
-    newTag: 224e86aa5d80e60acee897cb5d18ce66fab88bd2
+    newTag: 48f13cc8af3cdb02889cdcbdca6b3774b49d1cd9
   - name: reiver-mcp:latest
     newName: docker.io/library/reiver-mcp
-    newTag: 224e86aa5d80e60acee897cb5d18ce66fab88bd2
+    newTag: 48f13cc8af3cdb02889cdcbdca6b3774b49d1cd9
   - name: reiver-herd:latest
     newName: docker.io/library/reiver-herd
     newTag: latest
   - name: reiver-docs:latest
     newName: ghcr.io/reiver-ai/reiver-docs
-    newTag: dada3f1931a1168bd429057f217a6f59da24598b
+    newTag: 48f13cc8af3cdb02889cdcbdca6b3774b49d1cd9
 
 # Allow pulling private ghcr.io images. Create secret once: kubectl create secret docker-registry ghcr.io-pull-secret -n reiver --docker-server=ghcr.io --docker-username=YOUR_GITHUB_USER --docker-password=YOUR_TOKEN
 patches:
