@@ -38,6 +38,15 @@ fn parse_moodeng_project_id() -> Option<uuid::Uuid> {
         .and_then(|s| uuid::Uuid::parse_str(&s).ok())
 }
 
+fn quickstart_routes<S>(index_html: &str) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .route_service("/quickstart", ServeFile::new(index_html))
+        .route_service("/quickstart/", ServeFile::new(index_html))
+}
+
 /// Reiver Website -- auth/identity backend + frontend
 #[derive(Parser, Debug)]
 #[command(name = "reiver-website")]
@@ -430,13 +439,13 @@ async fn run_sso_worker_mode(
     Ok(())
 }
 
-async fn security_headers(
-    request: axum::extract::Request,
-    next: Next,
-) -> axum::response::Response {
+async fn security_headers(request: axum::extract::Request, next: Next) -> axum::response::Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     headers.insert(
         "strict-transport-security",
@@ -803,6 +812,7 @@ async fn run_api_server(
         .merge(watch_integration_proxy)
         .merge(watch_direct)
         .merge(herd_routes)
+        .merge(quickstart_routes(&index_html))
         .route("/mcp", axum::routing::post(proxy::proxy_to_mcp))
         .route(
             "/api/model-catalog",
@@ -836,4 +846,46 @@ async fn run_api_server(
     .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quickstart_routes;
+    use axum::body::{to_bytes, Body};
+    use axum::http::{Request, StatusCode};
+    use std::fs;
+    use tower::Service;
+
+    #[tokio::test]
+    async fn quickstart_routes_serve_the_spa_entrypoint_with_success() {
+        let frontend_dir = std::env::temp_dir().join(format!(
+            "reiver-quickstart-route-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&frontend_dir).expect("create frontend fixture directory");
+
+        let index_html = frontend_dir.join("index.html");
+        fs::write(&index_html, "quickstart-spa-entrypoint").expect("write frontend fixture");
+
+        let mut app = quickstart_routes::<()>(
+            index_html
+                .to_str()
+                .expect("temporary path should be valid UTF-8"),
+        );
+
+        for uri in ["/quickstart", "/quickstart/"] {
+            let response = app
+                .call(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .expect("quickstart route response");
+
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("read quickstart response body");
+            assert_eq!(&body[..], b"quickstart-spa-entrypoint", "{uri}");
+        }
+
+        fs::remove_dir_all(frontend_dir).expect("remove frontend fixture directory");
+    }
 }
