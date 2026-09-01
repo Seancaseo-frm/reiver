@@ -18,7 +18,7 @@ MCP requires an agent token. Regular SDK API keys will be rejected with a 403 er
 
 Start with read-only scopes such as `project:read`, `llm:read`, and `observability:read`, adding only the scopes needed for an approved task. Flow and Watch onboarding do not require MCP write access.
 
-The current MCP server does not expose `agent://onboarding`. Use the human [Start Here](/quickstart) guide; onboarding-specific MCP guidance is deliberately deferred to a later MCP release.
+After connecting, ask the agent to read `agent://onboarding` first. It helps the agent select the smallest Flow, Watch, or Complete Reiver track, preserve existing settings, respect credential boundaries, and return evidence against the correct definition of done. Reading it grants no additional permissions; the agent token's scopes remain the hard boundary.
 
 ## Cursor
 

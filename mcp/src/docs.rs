@@ -12,6 +12,11 @@ pub struct DocPage {
     pub content: &'static str,
 }
 
+/// Initialization guidance shared by stdio and Streamable HTTP transports.
+/// Keep this concise because some MCP clients truncate server instructions.
+pub const SERVER_INSTRUCTIONS: &str =
+    "Reiver MCP. Before onboarding or changing an application, read agent://onboarding. Select the smallest Flow, Watch, or Complete track and use its definition of done. Read gateway_settings.agent_soul when get and llm:read are available, then reconcile it with the application. Token scopes are the technical boundary; the owner's assignment is the behavioural boundary. Read fresh state before writes, update only intended fields, preserve unrelated settings, and never expose credentials.";
+
 macro_rules! doc_page {
     ($uri:expr, $name:expr, $desc:expr, $path:expr) => {
         DocPage {
@@ -24,6 +29,12 @@ macro_rules! doc_page {
 }
 
 pub static ALL_DOCS: &[DocPage] = &[
+    doc_page!(
+        "agent://onboarding",
+        "Reiver — Application Onboarding",
+        "Read first: track selection, business context, credential boundaries, safe writes, integration workflows, and evidence-based acceptance checks",
+        "../agent-docs/onboarding.md"
+    ),
     doc_page!(
         "agent://overview",
         "Reiver Overview",
@@ -105,4 +116,45 @@ pub static ALL_DOCS: &[DocPage] = &[
 /// Look up a doc page by its URI.
 pub fn find_doc(uri: &str) -> Option<&'static DocPage> {
     ALL_DOCS.iter().find(|d| d.uri == uri)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn onboarding_is_the_first_resource() {
+        assert_eq!(
+            ALL_DOCS.first().map(|doc| doc.uri),
+            Some("agent://onboarding")
+        );
+    }
+
+    #[test]
+    fn onboarding_contract_contains_required_boundaries() {
+        let content = find_doc("agent://onboarding").unwrap().content;
+        for marker in [
+            "Flow + Prompt Hub",
+            "Watch",
+            "Complete Reiver",
+            "gateway_settings",
+            "agent_soul",
+            "Session and Identity Contract",
+            "session_labels: []",
+            "session_profiles: []",
+            "owner's assignment",
+        ] {
+            assert!(
+                content.contains(marker),
+                "missing onboarding marker: {marker}"
+            );
+        }
+    }
+
+    #[test]
+    fn server_instructions_are_compact_and_point_to_onboarding() {
+        assert!(SERVER_INSTRUCTIONS.len() <= 512);
+        assert!(SERVER_INSTRUCTIONS.contains("agent://onboarding"));
+        assert!(SERVER_INSTRUCTIONS.contains("preserve unrelated settings"));
+    }
 }
