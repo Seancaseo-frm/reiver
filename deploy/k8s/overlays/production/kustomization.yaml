@@ -26,7 +26,7 @@ images:
     newTag: 224e86aa5d80e60acee897cb5d18ce66fab88bd2
   - name: reiver-website:latest
     newName: docker.io/library/reiver-website
-    newTag: 48f13cc8af3cdb02889cdcbdca6b3774b49d1cd9
+    newTag: a1d12247ab9d94b807dad15e0dc5e50d830a86ea
   - name: reiver-mcp:latest
     newName: docker.io/library/reiver-mcp
     newTag: 48f13cc8af3cdb02889cdcbdca6b3774b49d1cd9
