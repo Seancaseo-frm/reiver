@@ -14,7 +14,7 @@ Applications activate a managed prompt by referencing the config name in their r
 
 ```python
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="auto",
     messages=[{"role": "user", "content": "Hello!"}],
     extra_body={"prompt_config": "my-prompt-config"}
 )
@@ -24,7 +24,7 @@ Or via header:
 
 ```python
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="auto",
     messages=[{"role": "user", "content": "Hello!"}],
     extra_headers={"x-reiver-prompt-config": "my-prompt-config"}
 )
@@ -44,7 +44,7 @@ Managed prompts support Handlebars-style variables. Applications pass values at 
 
 ```python
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="auto",
     messages=[{"role": "user", "content": "Hello!"}],
     extra_body={
         "prompt_config": "my-prompt-config",
@@ -85,7 +85,7 @@ Rollouts support three allocation strategies:
 
 ### Creating and deploying a prompt version
 
-1. Create the version: `execute` with `resource: 'prompt', action: 'create_version', params: {config_id, system_prompt, model, temperature, commit_message}` — the `system_prompt` field is the prompt content and must contain the complete prompt text
+1. Create the version: `execute` with `resource: 'prompt', action: 'create_version', params: {config_id, system_prompt, temperature, commit_message}` — the `system_prompt` field is the prompt content and must contain the complete prompt text. Omit `model` to retain Reiver's project routing; set it only when this managed prompt intentionally owns a model override, using an exact ID from `list` resource `model_catalog`.
 2. Read the version back to confirm content: `get` with `resource: 'prompt_version', config_id, version_id`
 3. Deploy (should be explicitly requested by the user): `execute` with `resource: 'prompt', action: 'deploy', params: {config_id, target_version_id}` — this initiates a progressive rollout and live traffic begins flowing to the new version immediately
 4. Monitor: `get` with `resource: 'rollout_metrics', rollout_id` to compare baseline vs target performance

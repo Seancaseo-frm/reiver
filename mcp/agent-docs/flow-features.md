@@ -4,10 +4,11 @@ Flow provides these features on top of basic LLM routing. All features work acro
 
 ## Routing & Failover
 
-- **Per-request fallback models** — applications specify a `models` array of ordered fallbacks
+- **Project-owned fallback models** — Reiver stores ordered candidates in `default_fallback_models`; applications normally use `model: "auto"` and omit fallback arrays
 - **Multi-provider routing** — same model served by different providers (e.g., Claude via Anthropic or Bedrock)
-- **Provider preferences** — control provider selection with `order`, `only`, `ignore`, and `sort` fields
-- **Enhanced auto-routing** — `model: "auto"` combined with latency-based sorting
+- **Provider preferences** — project settings control provider selection with `order`, `only`, `ignore`, `allow_fallbacks`, and `sort`
+- **Advanced request overrides** — explicit application-owned routing can still provide `models` and `provider` per request
+- **Auto-routing** — `model: "auto"` selects from project defaults or models derived from enabled integrations
 
 Response headers indicate when failover occurs: `x-reiver-fallback-used`, `x-reiver-original-model`, `x-reiver-model-used`, `x-reiver-retry-count`.
 
@@ -71,3 +72,5 @@ Gateway settings (caching, guardrails, budgets, rate limits, fallback config) ar
 `execute` with `resource: 'gateway', action: 'update_settings'` — this action changes settings that affect all traffic through the LLM gateway and should be explicitly requested by the user.
 
 To view current settings: `get` with `resource: 'gateway_settings'`.
+
+To discover current project model IDs: `list` with `resource: 'model_catalog'`.

@@ -113,12 +113,26 @@ See the detailed workflows in the Prompt Management documentation. Key operation
 ### REST Endpoint
 
 - `GET /api/llm/settings` — get all settings
-- `PUT /api/llm/settings` — update settings (introspection, thinking budget, fallback, retry, rate limits, session budgets, guardrails, agent config)
+- `PUT /api/llm/settings` — update settings (introspection, thinking budget, fallback, retry, rate limits, session budgets, guardrails, project model candidates, provider preferences, agent config)
 
 ### MCP Equivalent
 
 - View: `get` with `resource: 'gateway_settings'`
 - Update: `execute` with `resource: 'gateway', action: 'update_settings'` — changes affect all traffic through the gateway and should be explicitly requested by the user
+
+For Reiver-owned routing, applications send `model: "auto"` and omit request-level `models` and `provider`. Configure exact live catalogue IDs in `default_fallback_models` and the project provider policy in `provider_preferences`. An empty model list lets Flow derive candidates from enabled integrations.
+
+## Live Model Catalogue
+
+### REST Endpoint
+
+- `GET /api/llm/settings/models` — list current interactive models filtered to the project's enabled provider integrations
+
+### MCP Equivalent
+
+- `list` with `resource: 'model_catalog'`
+
+Use this result as the source of truth before changing routing settings or explicitly pinning a model. Do not copy model IDs from static documentation.
 
 ## Text Search
 

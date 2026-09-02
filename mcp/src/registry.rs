@@ -706,6 +706,18 @@ mod tests {
     }
 
     #[test]
+    fn schema_playground_model_uses_live_catalog_or_project_routing() {
+        use crate::actions::flow::playground::RunPlaygroundInput;
+        let schema = serde_json::to_value(schemars::schema_for!(RunPlaygroundInput)).unwrap();
+        let description = schema["properties"]["model"]["description"]
+            .as_str()
+            .expect("model should have a description");
+        assert!(description.contains("model_catalog"));
+        assert!(description.contains("project"));
+        assert!(!schema_required_contains(&schema, "model"));
+    }
+
+    #[test]
     fn schema_gateway_settings_has_guardrails() {
         use crate::actions::flow::settings::UpdateGatewaySettingsInputWrapper;
         let schema =
@@ -719,6 +731,23 @@ mod tests {
             schema_has_description(gs, "guardrails"),
             "guardrails should have description"
         );
+        assert!(
+            schema_has_description(gs, "default_fallback_models"),
+            "default_fallback_models should have description"
+        );
+        assert!(
+            schema_has_description(gs, "provider_preferences"),
+            "provider_preferences should have description"
+        );
+
+        let prefs = &schema["definitions"]["ProviderPreferencesInput"];
+        for field in &["order", "only", "ignore", "allow_fallbacks", "sort"] {
+            assert!(
+                schema_has_description(prefs, field),
+                "ProviderPreferencesInput.{} should have a description",
+                field
+            );
+        }
     }
 
     // ── Enum serialization round-trip tests ─────────────────────────
@@ -1214,6 +1243,7 @@ mod tests {
             "health_checks",
             "prompt_configs",
             "projects",
+            "model_catalog",
         ] {
             assert!(
                 schema_str.contains(resource),
@@ -1330,6 +1360,14 @@ mod tests {
         let json = serde_json::json!({ "resource": "alert_rules" });
         let input: ListInput = serde_json::from_value(json).unwrap();
         assert!(matches!(input, ListInput::AlertRules(_)));
+    }
+
+    #[test]
+    fn facade_list_input_deserializes_model_catalog() {
+        use crate::actions::facade::list::ListInput;
+        let json = serde_json::json!({ "resource": "model_catalog" });
+        let input: ListInput = serde_json::from_value(json).unwrap();
+        assert!(matches!(input, ListInput::ModelCatalog(_)));
     }
 
     #[test]

@@ -25,9 +25,12 @@ Example (A2A): `{"resource": "a2a_task", "task_id": "<task-id>"}`
 
 Browse and list resources with optional filters. Set `resource` to select what to list.
 
-Resources: `traces`, `services`, `service_versions`, `sessions`, `session_profiles`, `exceptions`, `incidents`, `api_endpoints`, `api_endpoint_errors`, `alert_rules`, `alerts`, `notification_channels`, `dashboards`, `dashboard_templates`, `widgets`, `health_checks`, `maintenance_windows`, `integrations`, `prompt_configs`, `prompt_versions`, `rollouts`, `profiles`, `service_profiles`, `projects`, `api_keys`, `llm_scores`, `llm_pricing`, `metric_names`, `trace_attribute_keys`, `trace_attribute_values`, `log_attribute_keys`, `log_attribute_values`, `a2a_agents`, `a2a_tasks`.
+Resources: `traces`, `services`, `service_versions`, `sessions`, `session_profiles`, `exceptions`, `incidents`, `api_endpoints`, `api_endpoint_errors`, `alert_rules`, `alerts`, `notification_channels`, `dashboards`, `dashboard_templates`, `widgets`, `health_checks`, `maintenance_windows`, `integrations`, `prompt_configs`, `prompt_versions`, `rollouts`, `profiles`, `service_profiles`, `projects`, `api_keys`, `llm_scores`, `llm_pricing`, `model_catalog`, `metric_names`, `trace_attribute_keys`, `trace_attribute_values`, `log_attribute_keys`, `log_attribute_values`, `a2a_agents`, `a2a_tasks`.
+
+`model_catalog` is the live, project-filtered source of truth for interactive Flow model IDs. Use it before configuring routing or explicitly pinning a model; do not guess IDs from static documentation.
 
 Example: `{"resource": "traces", "status": "error", "limit": 10}`
+Example (Flow models): `{"resource": "model_catalog"}`
 Example (A2A): `{"resource": "a2a_agents", "query": "billing"}`
 
 ## analyze

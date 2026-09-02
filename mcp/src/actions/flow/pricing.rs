@@ -43,6 +43,48 @@ impl PlatformAction for ListModelPricing {
     }
 }
 
+#[derive(Deserialize, JsonSchema)]
+pub struct ListModelCatalogInput {}
+
+#[derive(Serialize)]
+pub struct ListModelCatalogOutput {
+    pub catalog: serde_json::Value,
+}
+
+/// Project-filtered live model catalogue for agent-led onboarding.
+pub struct ListModelCatalog;
+
+#[async_trait]
+impl PlatformAction for ListModelCatalog {
+    type Input = ListModelCatalogInput;
+    type Output = ListModelCatalogOutput;
+
+    fn name(&self) -> &'static str {
+        "list_model_catalog"
+    }
+
+    fn description(&self) -> &'static str {
+        "List the current interactive LLM models available through this project's enabled \
+         provider integrations. This live catalogue is the source of truth for model IDs; \
+         do not copy model IDs from static documentation or guess newer names."
+    }
+
+    fn required_scope(&self) -> String {
+        "llm:read".into()
+    }
+
+    async fn execute(
+        &self,
+        ctx: &ActionContext,
+        _input: Self::Input,
+    ) -> anyhow::Result<Self::Output> {
+        let resp = ctx.http.flow_get("/api/llm/settings/models").await?;
+        let catalog = resp.json().await?;
+        Ok(ListModelCatalogOutput { catalog })
+    }
+}
+
 pub fn register(registry: &mut ActionRegistry) {
     registry.register(ListModelPricing);
+    registry.register(ListModelCatalog);
 }

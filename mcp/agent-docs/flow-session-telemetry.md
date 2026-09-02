@@ -25,7 +25,7 @@ session_id = "sess-42"
 with tracer.start_as_current_span("process_user_message") as span:
     span.set_attribute("gen_ai.session_id", session_id)
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="auto",
         messages=messages,
         extra_headers={"x-reiver-session-id": session_id},
     )

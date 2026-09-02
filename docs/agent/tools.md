@@ -22,7 +22,7 @@ All tools operate within the context of the authenticated project.
 Search across different data sources. Set `source` to select the search backend.
 
 ```json
-{ "source": "llm_requests", "query": "error handling", "model": "gpt-4o" }
+{ "source": "llm_requests", "query": "error handling", "model": "<observed-model-id>" }
 ```
 
 | Source | Description | Key Parameters |
@@ -103,6 +103,7 @@ Browse and list resources with optional filters. Set `resource` to select what t
 | `api_keys` | API keys |
 | `llm_scores` | LLM quality scores |
 | `llm_pricing` | LLM model pricing (internal) |
+| `model_catalog` | Current interactive model IDs filtered to the project's enabled provider integrations. Use this live catalogue before configuring routing or explicitly pinning a model. |
 | `metric_names` | Available OpenTelemetry metric names. Filters: `prefix?`, `limit?`. Returns name, type, unit, label keys. Use before querying otel_metrics. |
 
 ---

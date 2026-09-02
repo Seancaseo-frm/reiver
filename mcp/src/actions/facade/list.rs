@@ -12,6 +12,7 @@ use crate::actions::dashboards::{
     ListWidgets, ListWidgetsInput,
 };
 use crate::actions::flow::integrations::{ListIntegrations, ListIntegrationsInput};
+use crate::actions::flow::pricing::{ListModelCatalog, ListModelCatalogInput};
 use crate::actions::flow::prompts::{
     ListPromptConfigs, ListPromptConfigsInput, ListPromptVersions, ListPromptVersionsInput,
     ListRollouts, ListRolloutsInput,
@@ -152,6 +153,9 @@ pub enum ListInput {
     /// List LLM model pricing (internal)
     #[serde(rename = "llm_pricing")]
     LlmPricing(ListLlmPricingInput),
+    /// List current interactive models available to this project's integrations
+    #[serde(rename = "model_catalog")]
+    ModelCatalog(ListModelCatalogInput),
     /// List available OpenTelemetry metric names
     #[serde(rename = "metric_names")]
     MetricNames(ListMetricNamesInput),
@@ -191,9 +195,9 @@ impl PlatformAction for ListTool {
          api_endpoints, api_endpoint_errors, alert_rules, alerts, notification_channels, \
          dashboards, dashboard_templates, widgets, health_checks, maintenance_windows, \
          integrations, prompt_configs, prompt_versions, rollouts, profiles, service_profiles, \
-         projects, api_keys, llm_scores, llm_pricing, metric_names, trace_attribute_keys, \
-         trace_attribute_values, log_attribute_keys, log_attribute_values, a2a_agents, \
-         a2a_tasks. Most support limit/offset and resource-specific filters. Use 'get' with \
+         projects, api_keys, llm_scores, llm_pricing, model_catalog, metric_names, \
+         trace_attribute_keys, trace_attribute_values, log_attribute_keys, log_attribute_values, \
+         a2a_agents, a2a_tasks. Most support limit/offset and resource-specific filters. Use 'get' with \
          a specific ID for full details. Use trace_attribute_keys/values and \
          log_attribute_keys/values to discover filterable attributes, then pass them to \
          traces or logs list/search."
@@ -247,6 +251,7 @@ impl PlatformAction for ListTool {
             ListInput::ApiKeys(p) => dispatch!(ctx, "project:read", ListApiKeys, p),
             ListInput::LlmScores(p) => dispatch!(ctx, "llm:read", ListLlmScores, p),
             ListInput::LlmPricing(p) => dispatch!(ctx, "internal:read", ListLlmPricing, p),
+            ListInput::ModelCatalog(p) => dispatch!(ctx, "llm:read", ListModelCatalog, p),
             ListInput::MetricNames(p) => dispatch!(ctx, "observability:read", ListMetricNames, p),
             ListInput::TraceAttributeKeys(p) => {
                 dispatch!(ctx, "observability:read", ListTraceAttributeKeys, p)
