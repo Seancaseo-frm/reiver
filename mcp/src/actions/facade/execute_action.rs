@@ -304,9 +304,7 @@ impl PlatformAction for ExecuteTool {
         use crate::actions;
 
         let params = match input.params {
-            serde_json::Value::String(ref s) => {
-                serde_json::from_str(s).unwrap_or(input.params)
-            }
+            serde_json::Value::String(ref s) => serde_json::from_str(s).unwrap_or(input.params),
             other => other,
         };
 

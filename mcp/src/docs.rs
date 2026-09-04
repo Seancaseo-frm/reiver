@@ -186,7 +186,9 @@ mod tests {
         ] {
             let content = find_doc(uri).unwrap().content;
             assert!(
-                content.contains("model: \"auto\"") || content.contains("model=\"auto\""),
+                content.contains("model: \"auto\"")
+                    || content.contains("model=\"auto\"")
+                    || content.contains("\"model\": \"auto\""),
                 "{uri} should teach Reiver-owned auto routing"
             );
         }
