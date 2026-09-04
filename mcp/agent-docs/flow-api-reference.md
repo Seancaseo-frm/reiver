@@ -17,7 +17,7 @@ Applications authenticate with a project API key: `Authorization: Bearer dh_your
 
 ```json
 {
-  "model": "gpt-4o",
+  "model": "auto",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello!"}
@@ -30,7 +30,7 @@ Applications authenticate with a project API key: `Authorization: Bearer dh_your
 
 ### Fields
 
-- `model` (string, required) — model identifier (e.g., `"gpt-4o"`, `"claude-3-5-sonnet"`, `"auto"`)
+- `model` (string, required) — use `"auto"` for Reiver-owned routing. Use a concrete ID from MCP `list` resource `model_catalog` only when the application explicitly owns the pin.
 - `messages` (array, required) — message objects with `role` and `content`. Max 1000 messages, max 1MB per message.
 - `temperature` (number) — 0.0–2.0
 - `max_tokens` (integer) — max tokens to generate, up to 1,000,000
@@ -90,7 +90,7 @@ Applications authenticate with a project API key: `Authorization: Bearer dh_your
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1700000000,
-  "model": "gpt-4o",
+  "model": "<actual-model-id>",
   "choices": [{
     "index": 0,
     "message": {"role": "assistant", "content": "Hello! How can I help you?"},

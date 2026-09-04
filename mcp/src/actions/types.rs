@@ -151,7 +151,7 @@ pub struct AlertQueryConfigInput {
     /// "llm.token_usage", "llm.request_count".
     #[serde(default)]
     pub metric_name: Option<String>,
-    /// Key-value filters (e.g. `{"model": "gpt-4o"}` for LLM,
+    /// Key-value filters (e.g. `{"model": "<observed-model-id>"}` for LLM,
     /// `{"service.name": "api"}` for OTel metrics).
     #[serde(default)]
     pub filters: BTreeMap<String, String>,
@@ -352,6 +352,24 @@ pub struct GuardrailConfigInput {
     pub block_exfiltration_urls: Option<bool>,
 }
 
+/// Project-level provider routing preferences.
+///
+/// These defaults live in Reiver. Applications normally send `model: "auto"`
+/// and omit per-request `models` / `provider` overrides so Flow owns routing.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct ProviderPreferencesInput {
+    /// Ordered provider slugs to prefer, e.g. ["anthropic", "bedrock"].
+    pub order: Option<Vec<String>>,
+    /// Restrict routing to only these provider slugs.
+    pub only: Option<Vec<String>>,
+    /// Exclude these provider slugs from routing.
+    pub ignore: Option<Vec<String>>,
+    /// Allow fallback to other configured models/providers.
+    pub allow_fallbacks: Option<bool>,
+    /// Routing sort strategy. Currently supported: "latency".
+    pub sort: Option<String>,
+}
+
 /// LLM gateway settings (partial update — only provided fields are changed).
 /// Use get_gateway_settings first to see current values.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -366,6 +384,15 @@ pub struct GatewaySettingsInput {
     pub fallback_enabled: Option<bool>,
     /// Ordered provider names for fallback, e.g. ["anthropic", "openai", "google"]
     pub fallback_order: Option<Vec<String>>,
+    /// Ordered project-level model candidates used by `model: "auto"` and as
+    /// the default fallback chain when an application supplies no `models`
+    /// array. Use model IDs returned by `list` resource `model_catalog`.
+    /// An explicit empty array clears the configured list so Flow derives
+    /// candidates from the project's enabled integrations.
+    pub default_fallback_models: Option<Vec<String>>,
+    /// Project-level provider routing defaults. Applications normally omit
+    /// per-request provider overrides and let Reiver apply these settings.
+    pub provider_preferences: Option<ProviderPreferencesInput>,
     /// Enable automatic retries on transient errors (default: true)
     pub retry_enabled: Option<bool>,
     /// Max retry attempts, 1-10 (default: 3)

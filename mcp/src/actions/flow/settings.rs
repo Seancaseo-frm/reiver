@@ -7,7 +7,7 @@ use crate::actions::types::GatewaySettingsInput;
 use crate::registry::ActionRegistry;
 
 /// Merge a partial MCP settings object into the freshly fetched canonical
-/// settings, including partial nested guardrail objects.
+/// settings, including partial composite configuration objects.
 fn deep_merge(base: &mut serde_json::Value, overlay: &serde_json::Value) {
     if let (serde_json::Value::Object(base_map), serde_json::Value::Object(overlay_map)) =
         (base, overlay)
@@ -42,9 +42,13 @@ fn build_update_payload(
         if value.is_null() {
             continue;
         }
-        if matches!(key.as_str(), "guardrails" | "agent_soul") {
+        if matches!(
+            key.as_str(),
+            "guardrails" | "agent_soul" | "provider_preferences"
+        ) {
             let mut composite = current
                 .and_then(|settings| settings.get(key))
+                .filter(|value| value.is_object())
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!({}));
             deep_merge(&mut composite, value);
@@ -131,7 +135,8 @@ impl PlatformAction for UpdateGatewaySettings {
         "Update LLM gateway settings for the current project. Changes affect all traffic \
          through the LLM gateway. This action should be explicitly requested by the user. \
          Only the provided fields are changed — omitted fields keep their current values. \
-         Composite guardrail and agent-soul fields are merged with their current object; \
+         Composite guardrail, provider-preference, and agent-soul fields are merged with their \
+         current object; \
          unrelated top-level settings are never resubmitted. \
          Covers introspection, fallback/retry, cost controls, rate limits, guardrails, \
          model preferences, agent config, session labels (taxonomy for automatic session \
@@ -152,7 +157,7 @@ impl PlatformAction for UpdateGatewaySettings {
 
         let patch = serde_json::to_value(&input.settings)?;
         let needs_composite = patch.as_object().is_some_and(|map| {
-            ["guardrails", "agent_soul"]
+            ["guardrails", "agent_soul", "provider_preferences"]
                 .iter()
                 .any(|key| map.get(*key).is_some_and(|value| !value.is_null()))
         });
@@ -266,6 +271,8 @@ mod tests {
             thinking_budget_tokens: None,
             fallback_enabled: Some(true),
             fallback_order: None,
+            default_fallback_models: None,
+            provider_preferences: None,
             retry_enabled: None,
             retry_max_attempts: None,
             monthly_budget_usd: None,
@@ -385,6 +392,77 @@ mod tests {
         assert_eq!(
             update["session_profiles"],
             serde_json::json!([{ "id": "profile-1" }])
+        );
+    }
+
+    #[test]
+    fn project_model_defaults_are_field_selective() {
+        let update = build_update_payload(
+            serde_json::json!({
+                "default_fallback_models": ["model-a", "model-b"],
+                "fallback_enabled": null
+            }),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            update,
+            serde_json::json!({
+                "default_fallback_models": ["model-a", "model-b"]
+            })
+        );
+    }
+
+    #[test]
+    fn provider_preferences_merge_with_current_defaults() {
+        let current = serde_json::json!({
+            "provider_preferences": {
+                "order": ["anthropic", "bedrock"],
+                "allow_fallbacks": true,
+                "sort": "latency"
+            }
+        });
+        let update = build_update_payload(
+            serde_json::json!({
+                "provider_preferences": {
+                    "only": ["anthropic"],
+                    "allow_fallbacks": false
+                }
+            }),
+            Some(&current),
+        )
+        .unwrap();
+        assert_eq!(
+            update["provider_preferences"]["order"],
+            serde_json::json!(["anthropic", "bedrock"])
+        );
+        assert_eq!(
+            update["provider_preferences"]["only"],
+            serde_json::json!(["anthropic"])
+        );
+        assert_eq!(update["provider_preferences"]["allow_fallbacks"], false);
+        assert_eq!(update["provider_preferences"]["sort"], "latency");
+    }
+
+    #[test]
+    fn provider_preferences_can_be_created_when_current_value_is_null() {
+        let current = serde_json::json!({ "provider_preferences": null });
+        let update = build_update_payload(
+            serde_json::json!({
+                "provider_preferences": {
+                    "order": ["anthropic"],
+                    "allow_fallbacks": true
+                }
+            }),
+            Some(&current),
+        )
+        .unwrap();
+        assert_eq!(
+            update["provider_preferences"],
+            serde_json::json!({
+                "order": ["anthropic"],
+                "allow_fallbacks": true
+            })
         );
     }
 }

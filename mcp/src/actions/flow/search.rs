@@ -14,7 +14,7 @@ pub struct SearchLlmRequestsInput {
     /// Maximum number of results (default: 10)
     #[schemars(range(min = 1, max = 100))]
     pub limit: Option<u32>,
-    /// Filter by model name (e.g. "claude-sonnet-4-6", "gpt-4o")
+    /// Filter by an actual model ID observed in gateway data.
     pub model: Option<String>,
     /// Filter by user ID
     pub user_id: Option<String>,

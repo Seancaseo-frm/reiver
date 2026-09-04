@@ -74,8 +74,8 @@ pub static ALL_DOCS: &[DocPage] = &[
     ),
     doc_page!(
         "agent://flow/models",
-        "Flow — Supported Models",
-        "Model identifiers, routing prefixes, and provider mapping for OpenAI, Anthropic, Gemini, Bedrock, DeepSeek, Theta",
+        "Flow — Live Model Discovery",
+        "Live project model catalogue, Reiver-owned auto routing, and rules for explicit application pins",
         "../agent-docs/flow-models.md"
     ),
     doc_page!(
@@ -143,6 +143,9 @@ mod tests {
             "session_labels: []",
             "session_profiles: []",
             "owner's assignment",
+            "model_catalog",
+            "default_fallback_models",
+            "model: \"auto\"",
         ] {
             assert!(
                 content.contains(marker),
@@ -156,5 +159,65 @@ mod tests {
         assert!(SERVER_INSTRUCTIONS.len() <= 512);
         assert!(SERVER_INSTRUCTIONS.contains("agent://onboarding"));
         assert!(SERVER_INSTRUCTIONS.contains("preserve unrelated settings"));
+    }
+
+    #[test]
+    fn flow_onboarding_docs_require_live_model_discovery() {
+        for uri in [
+            "agent://onboarding",
+            "agent://flow/getting-started",
+            "agent://flow/models",
+            "agent://flow/prompt-management",
+            "agent://flow/routing",
+            "agent://flow/api-reference",
+        ] {
+            let content = find_doc(uri).unwrap().content;
+            assert!(
+                content.contains("model_catalog"),
+                "{uri} should use the live model catalogue"
+            );
+        }
+
+        for uri in [
+            "agent://onboarding",
+            "agent://flow/getting-started",
+            "agent://flow/models",
+            "agent://flow/routing",
+        ] {
+            let content = find_doc(uri).unwrap().content;
+            assert!(
+                content.contains("model: \"auto\"")
+                    || content.contains("model=\"auto\"")
+                    || content.contains("\"model\": \"auto\""),
+                "{uri} should teach Reiver-owned auto routing"
+            );
+        }
+    }
+
+    #[test]
+    fn flow_onboarding_docs_do_not_pin_stale_claude_models() {
+        let stale_ids = [
+            "claude-3-5-sonnet",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "claude-opus-5-fast",
+        ];
+        for uri in [
+            "agent://onboarding",
+            "agent://flow/getting-started",
+            "agent://flow/models",
+            "agent://flow/prompt-management",
+            "agent://flow/routing",
+            "agent://flow/api-reference",
+            "agent://flow/session-telemetry",
+        ] {
+            let content = find_doc(uri).unwrap().content;
+            for stale_id in stale_ids {
+                assert!(
+                    !content.contains(stale_id),
+                    "{uri} should not pin stale model ID {stale_id}"
+                );
+            }
+        }
     }
 }

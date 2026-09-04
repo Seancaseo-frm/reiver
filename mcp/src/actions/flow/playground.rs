@@ -18,7 +18,8 @@ pub struct PlaygroundMessage {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct RunPlaygroundInput {
-    /// Model identifier (e.g. "gpt-4o", "claude-sonnet-4-6"). If omitted, uses the project's preferred model.
+    /// Exact model ID from `list` resource `model_catalog`. Omit this to use the
+    /// project's Reiver-owned routing defaults.
     /// When `prompt_config` is set, the model from the prompt version overrides this.
     pub model: Option<String>,
     /// Conversation messages
@@ -45,6 +46,12 @@ pub struct RunPlaygroundOutput {
 
 pub struct RunPlayground;
 
+fn playground_model_or_auto(model: Option<String>) -> String {
+    model
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "auto".to_string())
+}
+
 #[async_trait]
 impl PlatformAction for RunPlayground {
     type Input = RunPlaygroundInput;
@@ -57,6 +64,8 @@ impl PlatformAction for RunPlayground {
         "Send a prompt through the LLM gateway and return the model's response. \
          Routes through all configured guardrails, provider fallback, and cost tracking. \
          Returns the completion text, token usage, latency, and cost. \
+         Omit `model` to exercise the project's Reiver-owned auto routing and fallback chain; \
+         use an exact live catalogue ID only for an explicitly pinned-model test. \
          Supports managed prompts: set `prompt_config` to a Prompt Hub config name and \
          `prompt_variables` to fill template placeholders — the system prompt, model, and \
          settings are resolved from the active version automatically."
@@ -71,6 +80,7 @@ impl PlatformAction for RunPlayground {
         input: Self::Input,
     ) -> anyhow::Result<Self::Output> {
         let pid = ctx.project_id;
+        let model = playground_model_or_auto(input.model);
         let messages: Vec<serde_json::Value> = input
             .messages
             .into_iter()
@@ -78,7 +88,7 @@ impl PlatformAction for RunPlayground {
             .collect();
         let body = serde_json::json!({
             "project_id": pid,
-            "model": input.model,
+            "model": model,
             "messages": messages,
             "temperature": input.temperature,
             "max_tokens": input.max_tokens,
@@ -97,7 +107,7 @@ impl PlatformAction for RunPlayground {
 pub struct CompareModelsInput {
     /// Conversation messages to send to each model
     pub messages: Vec<PlaygroundMessage>,
-    /// List of model identifiers to compare (e.g. ["gpt-4o", "claude-sonnet-4-6"])
+    /// Exact model IDs returned by `list` resource `model_catalog`.
     pub compare_models: Vec<String>,
 }
 
@@ -118,7 +128,8 @@ impl PlatformAction for CompareModels {
     }
     fn description(&self) -> &'static str {
         "Send the same prompt to multiple models and return all responses side-by-side. \
-         Useful for evaluating model quality, latency, and cost before choosing a primary model."
+         Use only IDs returned by the live `model_catalog` list resource. Useful for evaluating \
+         model quality, latency, and cost before choosing a project routing policy."
     }
     fn required_scope(&self) -> String {
         "llm:write".into()
@@ -154,4 +165,24 @@ impl PlatformAction for CompareModels {
 pub fn register(registry: &mut ActionRegistry) {
     registry.register(RunPlayground);
     registry.register(CompareModels);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::playground_model_or_auto;
+
+    #[test]
+    fn omitted_or_empty_model_uses_project_auto_routing() {
+        assert_eq!(playground_model_or_auto(None), "auto");
+        assert_eq!(playground_model_or_auto(Some(String::new())), "auto");
+        assert_eq!(playground_model_or_auto(Some("  ".into())), "auto");
+    }
+
+    #[test]
+    fn explicit_live_model_id_is_preserved() {
+        assert_eq!(
+            playground_model_or_auto(Some("live-model-id".into())),
+            "live-model-id"
+        );
+    }
 }

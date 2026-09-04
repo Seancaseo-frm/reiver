@@ -5,10 +5,11 @@ Read this resource before changing an application for Reiver. Choose the smalles
 ## Start with context
 
 1. If the token exposes the MCP `get` tool and has `llm:read`, call `get` with `resource: "gateway_settings"` and read `agent_soul`. Treat it as persistent project context, not unquestionable truth.
-2. Inspect the application's README, user journeys, LLM calls, telemetry setup, data model, deployment path, and relevant tests. Reconcile what exists now with Agent Soul.
-3. Select one onboarding track. Honour an explicit choice. If the choice changes the architecture and remains genuinely unclear after inspection, ask one focused question.
-4. State a short **My understanding** summary: what the application does, who it serves, the outcome it should produce, important failure or safety conditions, and any privacy constraints.
-5. State the MCP scopes available and the authority given by the owner's assignment.
+2. When Flow or Complete Reiver may be selected and the token exposes `list` with `llm:read`, call `list` with `resource: "model_catalog"`. This is the live, project-filtered source of truth for interactive model IDs. Do not guess a model slug or copy one from static documentation. If the catalogue is unavailable, report that evidence gap instead of inventing an ID.
+3. Inspect the application's README, user journeys, LLM calls, telemetry setup, data model, deployment path, and relevant tests. Reconcile what exists now with Agent Soul.
+4. Select one onboarding track. Honour an explicit choice. If the choice changes the architecture and remains genuinely unclear after inspection, ask one focused question.
+5. State a short **My understanding** summary: what the application does, who it serves, the outcome it should produce, important failure or safety conditions, and any privacy constraints.
+6. State the MCP scopes available and the authority given by the owner's assignment.
 
 Do not make the owner repeat facts already supported by Agent Soul and the application. Ask only for material gaps or conflicts.
 
@@ -49,11 +50,16 @@ For gateway settings, send only the top-level fields intentionally being changed
 ## Flow + Prompt Hub workflow
 
 1. Read `agent://flow/getting-started`.
-2. Use a provider and model already intended for the application. Do not add fallback chains or extra providers merely for onboarding.
-3. Route the application's existing LLM path through `https://reiver.ai/api/gateway/v1` using `REIVER_FLOW_API_KEY`.
-4. Preserve the explicit model for the baseline. Add a managed prompt only if Prompt Hub is part of the selected goal.
-5. When sessions or per-user analysis are required, agree the Session and Identity Contract before adding identifiers.
-6. Prove one real application request and record the actual provider, model, and request identifier without exposing sensitive content.
+2. Inspect the application's existing LLM path, current gateway settings, enabled integrations, and live `model_catalog` before choosing a routing policy.
+3. Prefer Reiver-owned routing unless the owner explicitly requires an application-owned model pin:
+   - For Reiver-owned routing, the application sends `model: "auto"` and omits request-level `models` and `provider`. Keep the model order and provider policy in Reiver gateway settings.
+   - When explicitly authorised to configure routing, set `default_fallback_models` only from IDs in the live `model_catalog`. An empty project list lets Flow derive candidates from enabled integrations. Set `provider_preferences` only when the owner has specified that policy.
+   - Do not hardcode catalogue model IDs in application code merely to reproduce Reiver's project routing. If the owner explicitly chooses an application-owned pin, select it from the live catalogue and do not add fallback chains or providers merely for onboarding.
+4. Route the application's existing LLM path through `https://reiver.ai/api/gateway/v1` using `REIVER_FLOW_API_KEY`.
+5. Add a managed prompt only if Prompt Hub is part of the selected goal. A model override in a managed prompt is Reiver-owned configuration; do not duplicate it in application routing unless that precedence is intentional.
+6. When sessions or per-user analysis are required, agree the Session and Identity Contract before adding identifiers.
+7. Prove one real application request and record the actual provider, model, fallback state, and request identifier without exposing sensitive content.
+8. If the assignment requires exercised failover, use an existing staging or automated fault-injection path and verify the actual fallback response. Never disable a production integration, alter a provider key, or manufacture a production outage merely to prove fallback. If no safe path exists, distinguish configuration verification from unexercised failover in the report.
 
 Configuration, a connection test, or a Playground-only request is not proof that the application path works.
 

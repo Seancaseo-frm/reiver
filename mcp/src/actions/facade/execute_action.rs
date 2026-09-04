@@ -88,7 +88,7 @@ impl PlatformAction for ExecuteTool {
          metric_name?: string (for metrics/llm; use \"llm.\" prefix for LLM: \
          \"llm.error_rate\", \"llm.latency_p95\", \"llm.latency_avg\", \"llm.cost_daily\", \
          \"llm.token_usage\", \"llm.request_count\"), \
-         filters?: {} (e.g. {\"model\": \"gpt-4o\"} for LLM model filter), \
+         filters?: {} (e.g. {\"model\": \"<observed-model-id>\"} for LLM model filter), \
          group_by?: [string], \
          time_aggregation?: string (avg/sum/min/max/count/p50/p95/p99), \
          space_aggregation?: string, \
@@ -222,7 +222,12 @@ impl PlatformAction for ExecuteTool {
          GATEWAY:\n\
          gateway update_settings: { settings: { introspection_enabled?: bool, \
          thinking_budget_tokens?: number (0-200000), fallback_enabled?: bool, \
-         fallback_order?: [string], retry_enabled?: bool, retry_max_attempts?: number (1-10), \
+         fallback_order?: [string], default_fallback_models?: [string] \
+         (ordered project defaults; use IDs returned by list resource \"model_catalog\"; \
+         applications normally send model \"auto\" and omit request-level fallback arrays), \
+         provider_preferences?: { order?: [string], only?: [string], ignore?: [string], \
+         allow_fallbacks?: bool, sort?: \"latency\" }, \
+         retry_enabled?: bool, retry_max_attempts?: number (1-10), \
          monthly_budget_usd?: number, budget_alert_enabled?: bool, budget_hard_stop?: bool, \
          per_request_limit_usd?: number, rate_limit_enabled?: bool, rate_limit_rpm?: number, \
          session_budget_usd?: number, agent_enabled?: bool, \
@@ -248,7 +253,7 @@ impl PlatformAction for ExecuteTool {
          1) resource=\"prompt\", action=\"create_config\", \
          params={\"name\": \"my-prompt\", \"description\": \"...\"}\n\
          2) resource=\"prompt\", action=\"create_version\", \
-         params={\"config_id\": \"<id>\", \"system_prompt\": \"...\", \"model\": \"gpt-4o\", \
+         params={\"config_id\": \"<id>\", \"system_prompt\": \"...\", \
          \"commit_message\": \"v1\"}\n\
          3) Create a second version (v1 is auto-deployed): same as step 2 with updated content\n\
          4) resource=\"prompt\", action=\"deploy\", \
@@ -299,9 +304,7 @@ impl PlatformAction for ExecuteTool {
         use crate::actions;
 
         let params = match input.params {
-            serde_json::Value::String(ref s) => {
-                serde_json::from_str(s).unwrap_or(input.params)
-            }
+            serde_json::Value::String(ref s) => serde_json::from_str(s).unwrap_or(input.params),
             other => other,
         };
 
