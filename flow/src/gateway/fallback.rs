@@ -27,6 +27,9 @@ pub struct FallbackConfig {
     pub max_retry_delay: Duration,
     /// Whether to enable automatic fallback to alternate providers.
     pub enable_fallback: bool,
+    /// Request-local policy: only true for auto with an explicitly configured
+    /// candidate list. Legacy explicit-model and empty-list behavior is unchanged.
+    pub configured_auto: bool,
 }
 
 impl Default for FallbackConfig {
@@ -36,6 +39,7 @@ impl Default for FallbackConfig {
             initial_retry_delay: Duration::from_millis(INITIAL_RETRY_DELAY_MS),
             max_retry_delay: Duration::from_secs(10),
             enable_fallback: true,
+            configured_auto: false,
         }
     }
 }
@@ -54,7 +58,29 @@ impl FallbackConfig {
             initial_retry_delay: Duration::from_millis(config.gateway_initial_retry_delay_ms),
             max_retry_delay: Duration::from_millis(config.gateway_max_retry_delay_ms),
             enable_fallback: config.gateway_fallback_enabled,
+            configured_auto: false,
         }
+    }
+
+    pub(crate) fn retry_same_candidate(&self, error: &GatewayError) -> bool {
+        if self.configured_auto
+            && matches!(
+                error,
+                GatewayError::ProviderError { status: 429, .. }
+                    | GatewayError::RateLimitExceeded { .. }
+            )
+        {
+            return false;
+        }
+        is_retryable_error(error)
+    }
+
+    pub(crate) fn advance_candidate(&self, error: &GatewayError) -> bool {
+        // A Reiver limit must never be bypassed through another candidate.
+        if self.configured_auto && matches!(error, GatewayError::RateLimitExceeded { .. }) {
+            return false;
+        }
+        should_fallback(error)
     }
 
     /// Disable automatic fallback.
@@ -196,6 +222,55 @@ impl<T> FallbackResult<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configured_auto_distinguishes_project_and_provider_rate_limits() {
+        let config = FallbackConfig {
+            configured_auto: true,
+            ..Default::default()
+        };
+        let upstream = GatewayError::ProviderError {
+            provider: Provider::Anthropic,
+            status: 429,
+            message: "limited".into(),
+        };
+        let project = GatewayError::RateLimitExceeded {
+            limit: 10,
+            reset_seconds: 60,
+        };
+        assert!(!config.retry_same_candidate(&upstream));
+        assert!(config.advance_candidate(&upstream));
+        assert!(!config.retry_same_candidate(&project));
+        assert!(!config.advance_candidate(&project));
+        assert!(FallbackConfig::default().retry_same_candidate(&upstream));
+    }
+
+    #[test]
+    fn configured_auto_keeps_other_failure_policies() {
+        let config = FallbackConfig {
+            configured_auto: true,
+            ..Default::default()
+        };
+        for status in [400, 401, 403, 404, 408, 500, 502, 503, 504, 529] {
+            let error = GatewayError::ProviderError {
+                provider: Provider::Anthropic,
+                status,
+                message: "fake".into(),
+            };
+            assert_eq!(
+                config.retry_same_candidate(&error),
+                is_retryable_error(&error)
+            );
+            assert_eq!(config.advance_candidate(&error), should_fallback(&error));
+        }
+        for error in [
+            GatewayError::Timeout("fake".into()),
+            GatewayError::NetworkError("fake".into()),
+        ] {
+            assert!(config.retry_same_candidate(&error));
+            assert!(config.advance_candidate(&error));
+        }
+    }
 
     #[test]
     fn test_default_config() {
@@ -358,12 +433,8 @@ mod tests {
 
     #[test]
     fn test_fallback_result_provider_matches_construction() {
-        let result = FallbackResult::primary(
-            "ok",
-            "gemini-2.5-flash".to_string(),
-            Provider::Google,
-            0,
-        );
+        let result =
+            FallbackResult::primary("ok", "gemini-2.5-flash".to_string(), Provider::Google, 0);
         assert_eq!(result.provider_used, Provider::Google);
         assert_eq!(result.model_used, "gemini-2.5-flash");
     }
@@ -402,8 +473,14 @@ mod tests {
             status: 401,
             message: "Unauthorized".to_string(),
         };
-        assert!(!is_retryable_error(&err), "401 should not retry same provider");
-        assert!(should_fallback(&err), "401 should fallback to next provider");
+        assert!(
+            !is_retryable_error(&err),
+            "401 should not retry same provider"
+        );
+        assert!(
+            should_fallback(&err),
+            "401 should fallback to next provider"
+        );
     }
 
     #[test]
@@ -413,8 +490,14 @@ mod tests {
             status: 402,
             message: "Insufficient balance".to_string(),
         };
-        assert!(!is_retryable_error(&err), "402 should not retry same provider");
-        assert!(should_fallback(&err), "402 should fallback to next provider");
+        assert!(
+            !is_retryable_error(&err),
+            "402 should not retry same provider"
+        );
+        assert!(
+            should_fallback(&err),
+            "402 should fallback to next provider"
+        );
     }
 
     #[test]
@@ -424,8 +507,14 @@ mod tests {
             status: 403,
             message: "Forbidden".to_string(),
         };
-        assert!(!is_retryable_error(&err), "403 should not retry same provider");
-        assert!(should_fallback(&err), "403 should fallback to next provider");
+        assert!(
+            !is_retryable_error(&err),
+            "403 should not retry same provider"
+        );
+        assert!(
+            should_fallback(&err),
+            "403 should fallback to next provider"
+        );
     }
 
     #[test]
@@ -435,8 +524,14 @@ mod tests {
             status: 404,
             message: "Model not found".to_string(),
         };
-        assert!(!is_retryable_error(&err), "404 should not retry same provider");
-        assert!(should_fallback(&err), "404 should fallback to next provider");
+        assert!(
+            !is_retryable_error(&err),
+            "404 should not retry same provider"
+        );
+        assert!(
+            should_fallback(&err),
+            "404 should fallback to next provider"
+        );
     }
 
     #[test]
@@ -446,8 +541,14 @@ mod tests {
             status: 409,
             message: "Conflict".to_string(),
         };
-        assert!(!is_retryable_error(&err), "409 should not retry same provider");
-        assert!(should_fallback(&err), "409 should fallback to next provider");
+        assert!(
+            !is_retryable_error(&err),
+            "409 should not retry same provider"
+        );
+        assert!(
+            should_fallback(&err),
+            "409 should fallback to next provider"
+        );
     }
 
     #[test]
@@ -457,8 +558,14 @@ mod tests {
             status: 422,
             message: "Unprocessable entity".to_string(),
         };
-        assert!(!is_retryable_error(&err), "422 should not retry same provider");
-        assert!(should_fallback(&err), "422 should fallback to next provider");
+        assert!(
+            !is_retryable_error(&err),
+            "422 should not retry same provider"
+        );
+        assert!(
+            should_fallback(&err),
+            "422 should fallback to next provider"
+        );
     }
 
     #[test]

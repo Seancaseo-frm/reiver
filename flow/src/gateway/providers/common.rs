@@ -48,8 +48,9 @@ pub fn create_http_client(timeout: Duration) -> Client {
 /// - `{"error": {"message": "..."}}`  (OpenAI, Anthropic, Google)
 /// - Falls back to the raw error text if JSON parsing fails
 ///
-/// Status 429 is mapped to `GatewayError::RateLimitExceeded` so that the
-/// retry and fallback logic treats provider rate limits as retryable.
+/// Keep HTTP 429 as `ProviderError` so execution can distinguish upstream
+/// throttling from a Reiver-generated `RateLimitExceeded`. Client responses
+/// remain sanitized by `GatewayError::into_response`.
 ///
 /// # Arguments
 /// * `error_text` - Raw error response body
@@ -75,10 +76,6 @@ pub fn parse_provider_error(error_text: &str, provider: Provider, status: u16) -
             message = %message,
             "Provider returned 429 rate limit"
         );
-        return GatewayError::RateLimitExceeded {
-            limit: 0,
-            reset_seconds: 30,
-        };
     }
 
     GatewayError::ProviderError {
@@ -129,49 +126,38 @@ mod tests {
         }
     }
 
-    /// Regression: provider 429 responses were wrapped as `ProviderError { status: 429 }`
-    /// which `is_retryable_error` and `should_fallback` did not treat as retryable.
-    /// The fix maps status 429 to `RateLimitExceeded` so the retry/fallback system
-    /// handles provider rate limits correctly.
     #[test]
-    fn test_parse_provider_error_429_returns_rate_limit_exceeded() {
-        let error_text =
-            r#"{"error": {"message": "Rate limit exceeded", "type": "rate_limit_error"}}"#;
-        let error = parse_provider_error(error_text, Provider::OpenAi, 429);
-
-        assert!(
-            matches!(error, GatewayError::RateLimitExceeded { .. }),
-            "Status 429 must produce RateLimitExceeded, got: {:?}",
-            error
-        );
-    }
-
-    #[test]
-    fn test_parse_provider_error_429_plain_text() {
-        let error = parse_provider_error("Too many requests", Provider::Anthropic, 429);
-        assert!(
-            matches!(error, GatewayError::RateLimitExceeded { .. }),
-            "Plain-text 429 must also produce RateLimitExceeded, got: {:?}",
-            error
-        );
-    }
-
-    /// Regression: 429 responses hardcoded `reset_seconds: 0`, causing the
-    /// `retry-after` response header to be 0. This told clients to retry
-    /// immediately, worsening provider overload.
-    #[test]
-    fn test_parse_provider_error_429_has_nonzero_retry_after() {
-        let error = parse_provider_error("Rate limit exceeded", Provider::OpenAi, 429);
-        match error {
-            GatewayError::RateLimitExceeded { reset_seconds, .. } => {
-                assert!(
-                    reset_seconds > 0,
-                    "reset_seconds must be > 0 to prevent immediate client retries, got {}",
-                    reset_seconds
-                );
-            }
-            _ => panic!("Expected RateLimitExceeded, got: {:?}", error),
+    fn test_parse_provider_error_429_preserves_upstream_origin() {
+        for body in [
+            r#"{"error":{"message":"Too many requests"}}"#,
+            "Too many requests",
+        ] {
+            let error = parse_provider_error(body, Provider::Anthropic, 429);
+            assert!(matches!(
+                error,
+                GatewayError::ProviderError {
+                    provider: Provider::Anthropic,
+                    status: 429,
+                    ..
+                }
+            ));
+            assert_eq!(
+                error.client_facing_details(),
+                (
+                    "rate_limit_error",
+                    "Rate limit exceeded. Please retry after some time.".into()
+                )
+            );
         }
+    }
+
+    #[test]
+    fn test_parse_provider_error_429_keeps_nonzero_retry_after() {
+        use axum::response::IntoResponse;
+        let response =
+            parse_provider_error("private detail", Provider::Anthropic, 429).into_response();
+        assert_eq!(response.status(), 429);
+        assert_eq!(response.headers()["retry-after"], "30");
     }
 
     #[test]

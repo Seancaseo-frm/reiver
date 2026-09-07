@@ -487,6 +487,9 @@ pub(super) struct StreamingResponseContext {
     pub(super) billing_project_id: Uuid,
     pub(super) provider_name: &'static str,
     pub(super) start: Instant,
+    /// Resolved primary for configured auto, before replacing the stream request
+    /// with the successful fallback. None preserves legacy metadata semantics.
+    pub(super) original_model: Option<String>,
     pub(super) request_id: String,
     pub(super) prompt_resolution: Option<PromptResolution>,
     pub(super) fallback_used: bool,
@@ -576,7 +579,10 @@ pub(super) async fn handle_streaming_response(
     let session_budget_usd_for_done = ctx.session_budget_usd;
     let judge_enabled_for_done = judge_enabled_for_stream;
     let obs_fallback_used = ctx.fallback_used;
-    let obs_original_model = request_for_done.model.clone();
+    let obs_original_model = ctx
+        .original_model
+        .clone()
+        .unwrap_or_else(|| request_for_done.model.clone());
     let obs_retry_count = ctx.retry_count;
     let is_platform_key_for_done = ctx.is_platform_key;
     let billing_pid_for_done = ctx.billing_project_id;
@@ -841,6 +847,12 @@ pub(super) async fn handle_streaming_response(
 
     // Add fallback headers if applicable
     if ctx.fallback_used {
+        if let Some(original_model) = &ctx.original_model {
+            response.headers_mut().insert(
+                HeaderName::from_static("x-reiver-original-model"),
+                super::header_value(original_model, "unknown"),
+            );
+        }
         response.headers_mut().insert(
             HeaderName::from_static("x-reiver-fallback-used"),
             HeaderValue::from_static("true"),
@@ -933,12 +945,9 @@ fn emit_project_streaming_otel(
     if error.is_some() {
         let mut err_labels = labels.clone();
         err_labels.insert("error.type".into(), "stream_error".into());
-        state.otel_publisher.emit_counter(
-            project_id,
-            "gen_ai.client.error",
-            1.0,
-            err_labels,
-        );
+        state
+            .otel_publisher
+            .emit_counter(project_id, "gen_ai.client.error", 1.0, err_labels);
     }
 
     // Build span

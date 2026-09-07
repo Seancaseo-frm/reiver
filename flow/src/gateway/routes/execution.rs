@@ -8,9 +8,7 @@ use axum::response::Response;
 
 use crate::app_state::FlowState;
 use crate::gateway::error::GatewayError;
-use crate::gateway::fallback::{
-    calculate_retry_delay, is_retryable_error, should_fallback, FallbackConfig, FallbackResult,
-};
+use crate::gateway::fallback::{calculate_retry_delay, FallbackConfig, FallbackResult};
 use crate::gateway::prompt_resolver::PromptResolution;
 use crate::gateway::provider_types::Provider;
 use crate::gateway::router::GatewayRouter;
@@ -62,7 +60,7 @@ where
             Err(e) => e,
         };
 
-        if !is_retryable_error(&err) {
+        if !config.retry_same_candidate(&err) {
             return RetryOutcome::Failed {
                 error: err,
                 retries,
@@ -100,7 +98,10 @@ pub(super) async fn execute_with_fallback(
     config: &FallbackConfig,
     project_id: Uuid,
 ) -> Result<FallbackResult<ChatCompletionResponse>, GatewayError> {
-    let primary_provider = chain.first().map(|c| c.provider).unwrap_or(Provider::OpenAi);
+    let primary_provider = chain
+        .first()
+        .map(|c| c.provider)
+        .unwrap_or(Provider::OpenAi);
     let chain_desc: Vec<String> = chain
         .iter()
         .map(|c| format!("{}:{}", c.provider, c.model))
@@ -115,12 +116,21 @@ pub(super) async fn execute_with_fallback(
         fallback_provider = tracing::field::Empty,
         fallback_model = tracing::field::Empty,
         total_retries = tracing::field::Empty,
+        total_attempts = tracing::field::Empty,
         otel.status_code = tracing::field::Empty,
         otel.status_message = tracing::field::Empty,
     );
-    let result = execute_chain(state, router, request, chain, config, project_id, span.clone())
-        .instrument(span.clone())
-        .await;
+    let result = execute_chain(
+        state,
+        router,
+        request,
+        chain,
+        config,
+        project_id,
+        span.clone(),
+    )
+    .instrument(span.clone())
+    .await;
 
     if let Err(ref e) = result {
         span.record("otel.status_code", "ERROR");
@@ -141,6 +151,7 @@ async fn execute_chain(
 ) -> Result<FallbackResult<ChatCompletionResponse>, GatewayError> {
     let mut last_error = GatewayError::InternalError("No provider candidates".to_string());
     let mut total_retries = 0u32;
+    let mut total_attempts = 0u32;
 
     for (i, candidate) in chain.iter().enumerate() {
         // Skip circuit-broken or degraded providers.
@@ -184,6 +195,9 @@ async fn execute_chain(
         match outcome {
             RetryOutcome::Success { result, retries } => {
                 total_retries += retries;
+                total_attempts += retries + 1;
+                exec_span.record("total_attempts", total_attempts);
+                exec_span.record("total_retries", total_retries);
                 let fallback_used = i > 0;
                 if fallback_used {
                     tracing::info!(
@@ -200,16 +214,25 @@ async fn execute_chain(
                 exec_span.record("total_retries", total_retries);
                 return if fallback_used {
                     Ok(FallbackResult::fallback(
-                        result, candidate.model.clone(), candidate.provider, total_retries,
+                        result,
+                        candidate.model.clone(),
+                        candidate.provider,
+                        total_retries,
                     ))
                 } else {
                     Ok(FallbackResult::primary(
-                        result, candidate.model.clone(), candidate.provider, total_retries,
+                        result,
+                        candidate.model.clone(),
+                        candidate.provider,
+                        total_retries,
                     ))
                 };
             }
             RetryOutcome::Failed { error, retries } => {
                 total_retries += retries;
+                total_attempts += retries + 1;
+                exec_span.record("total_attempts", total_attempts);
+                exec_span.record("total_retries", total_retries);
                 tracing::warn!(
                     provider = %candidate.provider,
                     model = %candidate.model,
@@ -219,7 +242,7 @@ async fn execute_chain(
                     "Provider attempt failed"
                 );
                 emit_provider_key_error_event(state, project_id, candidate, &error);
-                if !should_fallback(&error) {
+                if !config.advance_candidate(&error) {
                     return Err(error);
                 }
                 last_error = error;
@@ -263,7 +286,10 @@ pub(super) async fn handle_streaming_with_chain(
     ctx: StreamingContext<'_>,
     chain: &[ProviderCandidate],
 ) -> Result<Response, GatewayError> {
-    let primary_provider = chain.first().map(|c| c.provider).unwrap_or(Provider::OpenAi);
+    let primary_provider = chain
+        .first()
+        .map(|c| c.provider)
+        .unwrap_or(Provider::OpenAi);
     let chain_desc: Vec<String> = chain
         .iter()
         .map(|c| format!("{}:{}", c.provider, c.model))
@@ -277,14 +303,23 @@ pub(super) async fn handle_streaming_with_chain(
         fallback_used = tracing::field::Empty,
         fallback_provider = tracing::field::Empty,
         fallback_model = tracing::field::Empty,
+        total_retries = tracing::field::Empty,
+        total_attempts = tracing::field::Empty,
     );
     async {
         let mut last_error = GatewayError::InternalError("No provider candidates".to_string());
         let mut total_retries = 0u32;
+        let mut total_attempts = 0u32;
 
         for (i, candidate) in chain.iter().enumerate() {
-            let circuit_open = ctx.gateway_router.circuit_breaker().is_open(&candidate.provider);
-            let degraded = ctx.gateway_router.latency_tracker().is_degraded(&candidate.provider);
+            let circuit_open = ctx
+                .gateway_router
+                .circuit_breaker()
+                .is_open(&candidate.provider);
+            let degraded = ctx
+                .gateway_router
+                .latency_tracker()
+                .is_degraded(&candidate.provider);
             if circuit_open || degraded {
                 let reason = if circuit_open {
                     format!("{} circuit breaker is open", candidate.provider)
@@ -321,10 +356,24 @@ pub(super) async fn handle_streaming_with_chain(
             .await;
 
             match outcome {
-                RetryOutcome::Success { result: stream, retries } => {
+                RetryOutcome::Success {
+                    result: stream,
+                    retries,
+                } => {
                     total_retries += retries;
+                    total_attempts += retries + 1;
+                    tracing::Span::current().record("total_attempts", total_attempts);
+                    tracing::Span::current().record("total_retries", total_retries);
                     let fallback_used = i > 0;
-                    ctx.gateway_router.circuit_breaker().record_success(&candidate.provider);
+                    tracing::Span::current().record("fallback_used", fallback_used);
+                    if fallback_used {
+                        tracing::Span::current()
+                            .record("fallback_provider", candidate.provider.as_str());
+                        tracing::Span::current().record("fallback_model", candidate.model.as_str());
+                    }
+                    ctx.gateway_router
+                        .circuit_breaker()
+                        .record_success(&candidate.provider);
                     if fallback_used {
                         tracing::info!(
                             original_model = %ctx.request.model,
@@ -339,6 +388,10 @@ pub(super) async fn handle_streaming_with_chain(
                         StreamingResponseContext {
                             chunk_stream: stream,
                             request: call_request,
+                            original_model: ctx
+                                .fallback_config
+                                .configured_auto
+                                .then(|| ctx.request.model.clone()),
                             project_id: ctx.project_id,
                             billing_project_id: ctx.billing_project_id,
                             provider_name: candidate.provider.as_str(),
@@ -362,7 +415,12 @@ pub(super) async fn handle_streaming_with_chain(
                 }
                 RetryOutcome::Failed { error, retries } => {
                     total_retries += retries;
-                    ctx.gateway_router.circuit_breaker().record_failure(&candidate.provider);
+                    total_attempts += retries + 1;
+                    tracing::Span::current().record("total_attempts", total_attempts);
+                    tracing::Span::current().record("total_retries", total_retries);
+                    ctx.gateway_router
+                        .circuit_breaker()
+                        .record_failure(&candidate.provider);
                     tracing::warn!(
                         provider = %candidate.provider,
                         model = %candidate.model,
@@ -372,7 +430,7 @@ pub(super) async fn handle_streaming_with_chain(
                         "Streaming provider attempt failed"
                     );
                     emit_provider_key_error_event(&state, ctx.project_id, candidate, &error);
-                    if !should_fallback(&error) {
+                    if !ctx.fallback_config.advance_candidate(&error) {
                         return Err(error);
                     }
                     last_error = error;
@@ -395,9 +453,10 @@ fn emit_provider_key_error_event(
     error: &GatewayError,
 ) {
     let (status, message) = match error {
-        GatewayError::ProviderError { status, message, .. }
-            if !candidate.is_platform_key
-                && (*status == 401 || *status == 402 || *status == 403 || *status == 404) =>
+        GatewayError::ProviderError {
+            status, message, ..
+        } if !candidate.is_platform_key
+            && (*status == 401 || *status == 402 || *status == 403 || *status == 404) =>
         {
             (*status, message.clone())
         }
@@ -429,6 +488,38 @@ fn emit_provider_key_error_event(
 mod tests {
     use super::*;
     use crate::gateway::fallback::FallbackConfig;
+
+    #[tokio::test]
+    async fn configured_auto_does_not_retry_either_kind_of_429() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        let config = FallbackConfig {
+            configured_auto: true,
+            ..Default::default()
+        };
+        for upstream in [false, true] {
+            let calls = AtomicU32::new(0);
+            let outcome: RetryOutcome<()> = retry_with_backoff(&config, || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    Err(if upstream {
+                        GatewayError::ProviderError {
+                            provider: Provider::Anthropic,
+                            status: 429,
+                            message: "fake".into(),
+                        }
+                    } else {
+                        GatewayError::RateLimitExceeded {
+                            limit: 10,
+                            reset_seconds: 60,
+                        }
+                    })
+                }
+            })
+            .await;
+            assert!(matches!(outcome, RetryOutcome::Failed { retries: 0, .. }));
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+        }
+    }
 
     /// Regression: `retry_with_backoff` must report the correct retry count
     /// when the operation succeeds on a retry attempt.  Previously the counter

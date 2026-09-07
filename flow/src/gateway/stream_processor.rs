@@ -462,10 +462,10 @@ mod tests {
             message: "Rate limit reached".to_string(),
         };
         let (error_type, message) = provider_err.client_facing_details();
-        assert_eq!(error_type, "api_error");
-        assert!(
-            !message.contains("Stream processing error occurred"),
-            "must not use the old generic error message"
+        assert_eq!(error_type, "rate_limit_error");
+        assert_eq!(
+            message,
+            "Rate limit exceeded. Please retry after some time."
         );
 
         let expected_json = serde_json::json!({

@@ -42,15 +42,15 @@ pub(super) async fn resolve_provider_chain(
     default_fallback_models: &[String],
     provider_prefs: Option<&crate::gateway::types::ProviderPreferences>,
     fallback_allowed: bool,
+    configured_auto: bool,
     theta_dedicated_base_url: Option<&str>,
 ) -> Result<Vec<ProviderCandidate>, GatewayError> {
     // Build the full model list: primary first, then fallbacks.
     let mut models: Vec<String> = vec![primary_model.to_string()];
 
     if fallback_allowed {
-        let fallback_tail = resolve_fallback_tail(
-            state, project_id, request_models, default_fallback_models,
-        ).await;
+        let fallback_tail =
+            resolve_fallback_tail(state, project_id, request_models, default_fallback_models).await;
 
         // Exclude primary, order by latency.
         let tail: Vec<String> = fallback_tail
@@ -62,13 +62,15 @@ pub(super) async fn resolve_provider_chain(
     }
 
     // Deduplicate while preserving order (primary stays at index 0).
-    let mut seen = std::collections::HashSet::new();
-    models.retain(|m| seen.insert(m.clone()));
+    deduplicate_models(&mut models, configured_auto);
 
     // Apply provider preferences (multi-endpoint models like Claude via
     // Anthropic vs Bedrock).  Preferences can change which provider_impl +
     // model id a candidate resolves to.
-    let models = apply_preferences(router, &models, provider_prefs);
+    let mut models = apply_preferences(router, &models, provider_prefs);
+    if configured_auto {
+        deduplicate_models(&mut models, true);
+    }
 
     // Collect unique provider slugs, batch-fetch keys.
     let provider_slugs: Vec<&str> = models
@@ -111,7 +113,10 @@ pub(super) async fn resolve_provider_chain(
         // Resolve the API key.
         let (key, is_platform_key) = if let Some(resolved) = keys.get(provider_slug) {
             (resolved.key.clone(), resolved.is_platform)
-        } else if let Some(cached) = state.provider_key_cache.get(&(project_id, provider_slug.to_string())) {
+        } else if let Some(cached) = state
+            .provider_key_cache
+            .get(&(project_id, provider_slug.to_string()))
+        {
             (cached.key.clone(), cached.is_platform)
         } else {
             tracing::warn!(model = %model, provider = %provider_slug, reason = "no API key", "Skipping candidate in provider chain");
@@ -134,6 +139,22 @@ pub(super) async fn resolve_provider_chain(
     }
 
     Ok(chain)
+}
+
+/// Preserve configured spelling and order, but compare Anthropic aliases using
+/// the same dot-to-dash normalization as its adapter. Other providers' IDs and
+/// service-mode suffixes remain distinct; this is not a provider identity rewrite.
+fn deduplicate_models(models: &mut Vec<String>, configured_auto: bool) {
+    let mut seen = std::collections::HashSet::new();
+    models.retain(|model| {
+        let identity =
+            if configured_auto && Provider::from_model_prefix(model) == Some(Provider::Anthropic) {
+                model.replace('.', "-")
+            } else {
+                model.clone()
+            };
+        seen.insert(identity)
+    });
 }
 
 /// Build the fallback model tail (excludes primary — caller filters).
@@ -309,10 +330,13 @@ pub(super) async fn get_provider_keys_batch(
         let cache_key = (project_id, provider.to_string());
         if let Some(cached) = state.provider_key_cache.get(&cache_key) {
             if cached.expires_at > now {
-                result.insert(provider.to_string(), ResolvedBatchKey {
-                    key: cached.key,
-                    is_platform: cached.is_platform,
-                });
+                result.insert(
+                    provider.to_string(),
+                    ResolvedBatchKey {
+                        key: cached.key,
+                        is_platform: cached.is_platform,
+                    },
+                );
                 continue;
             }
         }
@@ -363,10 +387,13 @@ pub(super) async fn get_provider_keys_batch(
                             expires_at,
                         },
                     );
-                    result.insert(provider.to_string(), ResolvedBatchKey {
-                        key: decrypted,
-                        is_platform: false,
-                    });
+                    result.insert(
+                        provider.to_string(),
+                        ResolvedBatchKey {
+                            key: decrypted,
+                            is_platform: false,
+                        },
+                    );
                 }
                 Err(e) => {
                     tracing::error!(
@@ -386,10 +413,13 @@ pub(super) async fn get_provider_keys_batch(
                 .ok()
                 .and_then(|p| state.provider_manager.default_keys().get(&p))
             {
-                result.insert(provider.to_string(), ResolvedBatchKey {
-                    key: default_key.clone(),
-                    is_platform: true,
-                });
+                result.insert(
+                    provider.to_string(),
+                    ResolvedBatchKey {
+                        key: default_key.clone(),
+                        is_platform: true,
+                    },
+                );
             }
         }
     }
@@ -402,6 +432,34 @@ mod tests {
     use super::*;
     use crate::gateway::provider_types::Provider;
     use crate::gateway::providers::{AnthropicProvider, BedrockProvider, OpenAiProvider};
+
+    #[test]
+    fn configured_auto_deduplicates_only_anthropic_aliases() {
+        let mut models: Vec<String> = [
+            "claude-opus-4.8",
+            "claude-opus-4-8",
+            "claude-opus-4.8-fast",
+            "claude-opus-4-8-fast",
+            "google/model-1.5",
+            "google/model-1-5",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        let mut legacy = models.clone();
+        deduplicate_models(&mut legacy, false);
+        assert_eq!(legacy, models);
+        deduplicate_models(&mut models, true);
+        assert_eq!(
+            models,
+            [
+                "claude-opus-4.8",
+                "claude-opus-4.8-fast",
+                "google/model-1.5",
+                "google/model-1-5"
+            ]
+        );
+    }
 
     fn mock_endpoints() -> Vec<(Arc<dyn LlmProvider>, String, Provider)> {
         vec![

@@ -5,8 +5,8 @@
 //!
 //! All infrastructure dependencies (`DbPool`, `RedisPool`, `ClickHousePool`,
 //! `KafkaProducer`) are constructed in lazy/no-op mode so no real services are
-//! required. The provider key and introspection caches are pre-populated so the
-//! handler never hits the database.
+//! required. Provider key and introspection caches are pre-populated; optional
+//! infrastructure lookups use short test-only pool timeouts when services are absent.
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
@@ -25,9 +25,9 @@ use reiver_flow::config::{Config, TotpAlgorithm};
 use reiver_flow::gateway::cache::GatewayCache;
 use reiver_flow::gateway::fallback::FallbackConfig;
 use reiver_flow::gateway::latency_tracker::LatencyTracker;
+use reiver_flow::gateway::prompt_store::PgPromptStore;
 use reiver_flow::gateway::provider_manager::{GatewayTimeouts, ProviderConfig, ProviderManager};
 use reiver_flow::gateway::GatewayRouter;
-use reiver_flow::gateway::prompt_store::PgPromptStore;
 use reiver_flow::{api, clickhouse_db, crypto, kafka, llm, trusted_proxy};
 
 /// No-op embedder for gateway tests that don't exercise knowledge base search.
@@ -63,6 +63,25 @@ impl TestApp {
     pub async fn new_with_prompt_store(
         prompt_store: Option<Arc<dyn reiver_flow::gateway::prompt_store::PromptWriteStore>>,
     ) -> Self {
+        Self::new_with_options(prompt_store, 0).await
+    }
+
+    pub async fn new_with_retries(max_retries: u32) -> Self {
+        let app = Self::new_with_options(None, max_retries).await;
+        app.state.project_org_cache.insert(
+            test_project_id(),
+            reiver_flow::app_state::CachedOrgId {
+                org_id: test_user_id(),
+                expires_at: Instant::now() + Duration::from_secs(600),
+            },
+        );
+        app
+    }
+
+    async fn new_with_options(
+        prompt_store: Option<Arc<dyn reiver_flow::gateway::prompt_store::PromptWriteStore>>,
+        max_retries: u32,
+    ) -> Self {
         let openai_mock = MockServer::start().await;
         let anthropic_mock = MockServer::start().await;
         let google_mock = MockServer::start().await;
@@ -72,6 +91,7 @@ impl TestApp {
             anthropic_mock.uri(),
             google_mock.uri(),
             prompt_store,
+            max_retries,
         )
         .await;
 
@@ -175,17 +195,21 @@ async fn build_test_state(
     anthropic_url: String,
     google_url: String,
     custom_prompt_store: Option<Arc<dyn reiver_flow::gateway::prompt_store::PromptWriteStore>>,
+    max_retries: u32,
 ) -> Arc<FlowState> {
-    let config = test_config(
+    let mut config = test_config(
         Some(openai_url.clone()),
         Some(anthropic_url.clone()),
         Some(google_url.clone()),
     );
+    config.gateway_max_retries = max_retries;
     let config_arc = Arc::new(config);
 
     // PgPool::connect_lazy never opens a network connection during construction.
-    // The gateway handler pre-populates caches so no DB queries fire in tests.
-    let db_pool = sqlx::PgPool::connect_lazy(&config_arc.database_url)
+    // Optional settings lookups may still run; fail quickly without a test DB.
+    let db_pool = sqlx::postgres::PgPoolOptions::new()
+        .acquire_timeout(Duration::from_millis(100))
+        .connect_lazy(&config_arc.database_url)
         .expect("PgPool::connect_lazy must not fail on URL parse");
     let db_pool_arc = Arc::new(db_pool);
 
@@ -198,6 +222,9 @@ async fn build_test_state(
     let redis_manager = bb8_redis::RedisConnectionManager::new(config_arc.redis_url.clone())
         .expect("Redis manager creation must not fail");
     let redis_pool = bb8::Pool::builder()
+        // Optional settings lookups use defaults when these test services are
+        // absent; do not spend 30 seconds on each pool wait.
+        .connection_timeout(Duration::from_millis(100))
         .max_size(2)
         .build(redis_manager)
         .await
@@ -234,7 +261,8 @@ async fn build_test_state(
     // Generate a temporary encryption key (not persisted between test runs).
     let temp_key = crypto::SecretEncryptor::generate_key();
     let encryptor = Arc::new(
-        crypto::RotatingSecretEncryptor::single_key(&temp_key).expect("generated key must be valid"),
+        crypto::RotatingSecretEncryptor::single_key(&temp_key)
+            .expect("generated key must be valid"),
     );
 
     // Cost calculator uses the DB only for price lookups, which never fire
@@ -270,9 +298,7 @@ async fn build_test_state(
             HashMap::new(),
         )
         .with_latency_tracker(latency_tracker.clone())
-        .with_model_catalog_cache(
-            (*model_catalog_cache).clone(),
-        ),
+        .with_model_catalog_cache((*model_catalog_cache).clone()),
     );
 
     let gateway_router = Arc::new(

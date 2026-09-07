@@ -1055,8 +1055,8 @@ async fn test_empty_model_uses_first_from_models_array() {
 // Prompt Config resolution through InMemoryPromptStore
 // ──────────────────────────────────────────────────────────────────────────────
 
-use reiver_flow::gateway::prompt_store::{InMemoryPromptStore, PromptConfigRow};
 use reiver_flow::gateway::prompt_resolver::PromptVersionConfig;
+use reiver_flow::gateway::prompt_store::{InMemoryPromptStore, PromptConfigRow};
 use rust_decimal::Decimal;
 use std::sync::Arc;
 
@@ -1171,11 +1171,7 @@ async fn test_primary_failure_falls_back_to_project_defaults() {
     let app = TestApp::new().await;
 
     // Project has fallback enabled with Anthropic as the fallback model.
-    app.set_routing(
-        true,
-        vec!["claude-3-5-sonnet-20241022".to_string()],
-        None,
-    );
+    app.set_routing(true, vec!["claude-3-5-sonnet-20241022".to_string()], None);
 
     // Trip the OpenAI circuit breaker (may or may not prevent the primary
     // call depending on test timing — the 500 mock covers both paths).
@@ -1375,7 +1371,11 @@ async fn test_platform_key_flag_preserved_through_fallback() {
         }))
         .await;
 
-    assert_eq!(resp.status(), 200, "fallback with platform key should succeed");
+    assert_eq!(
+        resp.status(),
+        200,
+        "fallback with platform key should succeed"
+    );
 
     let fallback_header = resp
         .headers()
@@ -1386,7 +1386,10 @@ async fn test_platform_key_flag_preserved_through_fallback() {
     assert_eq!(fallback_header, "true");
 
     let body: Value = resp.json().await.unwrap();
-    assert_eq!(body["choices"][0]["message"]["content"], "Platform key works!");
+    assert_eq!(
+        body["choices"][0]["message"]["content"],
+        "Platform key works!"
+    );
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1412,8 +1415,7 @@ async fn test_duplicate_fallback_models_deduplicated() {
     Mock::given(method("POST"))
         .and(path("/messages"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(anthropic_chat_response("Dedup fallback!")),
+            ResponseTemplate::new(200).set_body_json(anthropic_chat_response("Dedup fallback!")),
         )
         .expect(1)
         .mount(&app.anthropic_mock)
@@ -1431,4 +1433,260 @@ async fn test_duplicate_fallback_models_deduplicated() {
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body["choices"][0]["message"]["content"], "Dedup fallback!");
     // wiremock expect(1) verifies Anthropic received exactly 1 request on drop.
+}
+
+// Configured auto routing must recover within ONE client request. These tests
+// deliberately enable same-model retries, unlike the default test harness.
+mod configured_auto_429 {
+    use super::*;
+    use wiremock::matchers::body_partial_json;
+
+    const PRIMARY: &str = "claude-fable-5";
+    const SECONDARY: &str = "claude-opus-4.8";
+    const WIRE_SECONDARY: &str = "claude-opus-4-8";
+
+    fn anthropic_stream() -> String {
+        [
+            json!({"type":"message_start","message":{"id":"msg_fake","type":"message","role":"assistant","model":WIRE_SECONDARY,"content":[],"usage":{"input_tokens":10,"output_tokens":0}}}),
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"fallback answer"}}),
+            json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}),
+            json!({"type":"message_stop"}),
+        ].iter().map(|event| format!("data: {event}\n\n")).collect()
+    }
+
+    async fn post_once(app: &TestApp, body: Value) -> reqwest::Response {
+        tokio::time::timeout(std::time::Duration::from_secs(5), app.post_chat(body))
+            .await
+            .expect("one gateway request must finish within the bounded test deadline")
+    }
+
+    async fn rate_limit(app: &TestApp, wire_model: &str) {
+        Mock::given(method("POST"))
+            .and(path("/messages"))
+            .and(body_partial_json(json!({"model": wire_model})))
+            .respond_with(ResponseTemplate::new(429).set_body_json(json!({
+                "error":{"type":"rate_limit_error","message":"private upstream account detail"}
+            })))
+            .expect(1)
+            .mount(&app.anthropic_mock)
+            .await;
+    }
+
+    async fn assert_calls(app: &TestApp, expected: &[&str]) {
+        let requests = app.anthropic_mock.received_requests().await.unwrap();
+        let models: Vec<String> = requests
+            .iter()
+            .map(|r| {
+                serde_json::from_slice::<Value>(&r.body).unwrap()["model"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect();
+        assert_eq!(
+            models, expected,
+            "one gateway request must call each distinct candidate once, in order"
+        );
+        assert!(app
+            .openai_mock
+            .received_requests()
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(app
+            .google_mock
+            .received_requests()
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    async fn succeeds_on_next(stream: bool) {
+        let app = TestApp::new_with_retries(2).await;
+        app.set_routing(true, vec![PRIMARY.into(), SECONDARY.into()], None);
+        rate_limit(&app, PRIMARY).await;
+        let response = if stream {
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(anthropic_stream())
+        } else {
+            ResponseTemplate::new(200).set_body_json(anthropic_chat_response("fallback answer"))
+        };
+        Mock::given(method("POST"))
+            .and(path("/messages"))
+            .and(body_partial_json(json!({"model": WIRE_SECONDARY})))
+            .respond_with(response)
+            .expect(1)
+            .mount(&app.anthropic_mock)
+            .await;
+
+        // No application model list, and no application retry.
+        let response = post_once(
+            &app,
+            json!({"model":"auto", "stream":stream,
+            "messages":[{"role":"user","content":"hi"}]}),
+        )
+        .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()["x-reiver-provider"], "anthropic");
+        assert_eq!(response.headers()["x-reiver-model-used"], SECONDARY);
+        assert_eq!(response.headers()["x-reiver-fallback-used"], "true");
+        // Existing original-model semantics name the resolved primary, not "auto".
+        assert_eq!(response.headers()["x-reiver-original-model"], PRIMARY);
+        assert!(
+            response.headers().get("x-reiver-retry-count").is_none(),
+            "no same-model retries"
+        );
+        let body = response.text().await.unwrap();
+        assert!(body.contains("fallback answer"));
+        assert!(body.contains(SECONDARY));
+        assert_calls(&app, &[PRIMARY, WIRE_SECONDARY]).await;
+    }
+
+    #[tokio::test]
+    async fn non_streaming_advances_once() {
+        succeeds_on_next(false).await;
+    }
+
+    #[tokio::test]
+    async fn streaming_connection_advances_once() {
+        succeeds_on_next(true).await;
+    }
+
+    async fn exhausted(stream: bool, models: Vec<String>, expected: &[&str]) {
+        let app = TestApp::new_with_retries(2).await;
+        app.set_routing(true, models, None);
+        for model in expected {
+            rate_limit(&app, model).await;
+        }
+        let response = post_once(
+            &app,
+            json!({"model":"auto", "stream":stream,
+            "messages":[{"role":"user","content":"hi"}]}),
+        )
+        .await;
+        assert_eq!(response.status(), 429);
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["error"]["type"], "rate_limit_error");
+        assert_eq!(
+            body["error"]["message"],
+            "Rate limit exceeded. Please retry after some time."
+        );
+        assert_calls(&app, expected).await;
+    }
+
+    #[tokio::test]
+    async fn all_candidates_429_is_bounded() {
+        for stream in [false, true] {
+            exhausted(
+                stream,
+                vec![PRIMARY.into(), SECONDARY.into()],
+                &[PRIMARY, WIRE_SECONDARY],
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn no_alternative_returns_429_once() {
+        for stream in [false, true] {
+            exhausted(stream, vec![PRIMARY.into()], &[PRIMARY]).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn aliases_do_not_create_extra_attempts() {
+        for stream in [false, true] {
+            exhausted(
+                stream,
+                vec![
+                    PRIMARY.into(),
+                    SECONDARY.into(),
+                    WIRE_SECONDARY.into(),
+                    PRIMARY.into(),
+                ],
+                &[PRIMARY, WIRE_SECONDARY],
+            )
+            .await;
+            exhausted(
+                stream,
+                vec![SECONDARY.into(), WIRE_SECONDARY.into()],
+                &[WIRE_SECONDARY],
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_model_keeps_existing_429_retries() {
+        for stream in [false, true] {
+            let app = TestApp::new_with_retries(2).await;
+            app.set_routing(true, vec![PRIMARY.into()], None);
+            Mock::given(method("POST"))
+                .and(path("/messages"))
+                .respond_with(ResponseTemplate::new(429).set_body_string("private detail"))
+                .expect(3)
+                .mount(&app.anthropic_mock)
+                .await;
+            let response = post_once(
+                &app,
+                json!({"model":PRIMARY,"stream":stream,
+                "messages":[{"role":"user","content":"hi"}]}),
+            )
+            .await;
+            assert_eq!(response.status(), 429);
+            assert_calls(&app, &[PRIMARY, PRIMARY, PRIMARY]).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn disabled_fallback_still_does_not_repeat_429() {
+        for stream in [false, true] {
+            let app = TestApp::new_with_retries(2).await;
+            app.set_routing(false, vec![PRIMARY.into(), SECONDARY.into()], None);
+            rate_limit(&app, PRIMARY).await;
+            let response = post_once(
+                &app,
+                json!({"model":"auto","stream":stream,
+                "messages":[{"role":"user","content":"hi"}]}),
+            )
+            .await;
+            assert_eq!(response.status(), 429);
+            assert_calls(&app, &[PRIMARY]).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn never_replays_after_stream_content() {
+        let app = TestApp::new_with_retries(2).await;
+        app.set_routing(true, vec![PRIMARY.into(), SECONDARY.into()], None);
+        let body = format!(
+            "data: {}\n\ndata: {}\n\n",
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial answer"}}),
+            json!({"type":"error","error":{"type":"rate_limit_error","message":"stream rate limited"}})
+        );
+        Mock::given(method("POST"))
+            .and(path("/messages"))
+            .and(body_partial_json(json!({"model":PRIMARY})))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_string(body),
+            )
+            .expect(1)
+            .mount(&app.anthropic_mock)
+            .await;
+        let response = post_once(
+            &app,
+            json!({"model":"auto","stream":true,
+            "messages":[{"role":"user","content":"hi"}]}),
+        )
+        .await;
+        assert_eq!(response.status(), 200);
+        assert!(response.headers().get("x-reiver-fallback-used").is_none());
+        let body = response.text().await.unwrap();
+        assert!(body.contains("partial answer"));
+        assert!(body.contains("error"));
+        assert_calls(&app, &[PRIMARY]).await;
+    }
 }

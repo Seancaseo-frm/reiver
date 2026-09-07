@@ -1032,9 +1032,10 @@ fn map_converse_stream_error(err: &ConverseStreamError) -> GatewayError {
     record_otel_error(&format!("bedrock returned error: {message}"));
 
     if err.is_throttling_exception() {
-        return GatewayError::RateLimitExceeded {
-            limit: 0,
-            reset_seconds: 30,
+        return GatewayError::ProviderError {
+            provider: Provider::Bedrock,
+            status: 429,
+            message,
         };
     }
 
@@ -2153,8 +2154,15 @@ mod tests {
 
         let gateway_err = map_converse_stream_error(&err);
         assert!(
-            matches!(gateway_err, GatewayError::RateLimitExceeded { .. }),
-            "ThrottlingException must produce RateLimitExceeded, got: {:?}",
+            matches!(
+                gateway_err,
+                GatewayError::ProviderError {
+                    provider: Provider::Bedrock,
+                    status: 429,
+                    ..
+                }
+            ),
+            "ThrottlingException must preserve upstream 429 provenance, got: {:?}",
             gateway_err
         );
     }
@@ -2231,17 +2239,22 @@ mod tests {
         );
     }
 
-    /// Regression: Bedrock's non-streaming `chat_completion` bypassed `parse_provider_error`,
-    /// constructing a raw `ProviderError` for all HTTP errors. This meant 429 responses
-    /// produced `ProviderError { status: 429 }` instead of `RateLimitExceeded`, so the
-    /// `Retry-After` header was missing from the gateway response.
+    /// Bedrock HTTP 429 must keep upstream provenance and the sanitized response
+    /// contract supplied by the common parser and response boundary.
     #[test]
     fn test_bedrock_nonstreaming_429_uses_parse_provider_error() {
         let error_text = r#"{"message": "Rate limit exceeded"}"#;
         let err = parse_provider_error(error_text, Provider::Bedrock, 429);
         assert!(
-            matches!(err, GatewayError::RateLimitExceeded { .. }),
-            "Bedrock 429 must produce RateLimitExceeded (via parse_provider_error), got: {:?}",
+            matches!(
+                err,
+                GatewayError::ProviderError {
+                    provider: Provider::Bedrock,
+                    status: 429,
+                    ..
+                }
+            ),
+            "Bedrock 429 must retain provider origin, got: {:?}",
             err
         );
     }

@@ -89,7 +89,7 @@ pub enum GatewayError {
     /// Authentication failed (invalid API key).
     AuthenticationFailed(String),
 
-    /// Rate limit exceeded.
+    /// Reiver-generated rate limit (never an upstream provider HTTP 429).
     RateLimitExceeded { limit: u32, reset_seconds: u64 },
 
     /// Provider API returned an error.
@@ -248,7 +248,8 @@ impl GatewayError {
                 "authentication_error",
                 "Authentication with the AI provider failed.".to_string(),
             ),
-            GatewayError::RateLimitExceeded { .. } => (
+            GatewayError::RateLimitExceeded { .. }
+            | GatewayError::ProviderError { status: 429, .. } => (
                 "rate_limit_error",
                 "Rate limit exceeded. Please retry after some time.".to_string(),
             ),
@@ -316,6 +317,15 @@ impl From<reqwest::Error> for GatewayError {
 
 impl IntoResponse for GatewayError {
     fn into_response(self) -> Response {
+        // Preserve the existing sanitized HTTP contract and retry-after header.
+        // Convert only at the response boundary, after routing decisions.
+        if matches!(&self, Self::ProviderError { status: 429, .. }) {
+            return Self::RateLimitExceeded {
+                limit: 0,
+                reset_seconds: 30,
+            }
+            .into_response();
+        }
         let (status, error_type, message) = match &self {
             GatewayError::UnsupportedModel(model) => (
                 StatusCode::BAD_REQUEST,
