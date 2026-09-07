@@ -41,6 +41,8 @@ type: kubernetes
 name: deploy
 
 trigger:
+  event:
+    - push
   branch:
     - main
     - master
